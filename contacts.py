@@ -11,6 +11,10 @@ from google.auth.transport.requests import Request
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/contacts']
 
+# The user field that we store a key in to uniquely identify a person across
+# accounts
+SYNC_TAG = 'csync-uid'
+
 # all personFields, I don't know to programmatically get these, I just got them
 # from
 # https://developers.google.com/people/api/rest/v1/people.connections/list
@@ -77,10 +81,14 @@ class Contacts():
         creds = creds
         self.service = build('people', 'v1', credentials=creds)
 
-        self.contacts = self.__get_contacts()
+        self.get_info()
 
     def __strip_body(self, body):
         """Return a person body without photos/metadata and other things
+
+        We need just this info about a person when we do an update or add, the
+        photos field doesn't work with People API at the moment, and you don't
+        pass metadata for add/update.
 
         Parameters
         ----------
@@ -126,7 +134,7 @@ class Contacts():
         -------
         dict:
             Like body but without resourceName, etag, photos and metadata
-            fields.  Also any value dict doesn't have metadata either (eg
+            fields.  Also no metadata in each field (eg
             ['names'][0]['metadata']).
         """
 
@@ -142,42 +150,39 @@ class Contacts():
 
         return ret
 
-    def __get_contacts(self):
-        """Return a dict of contacts, key is resourceName
+    def get_info(self):
+        """Store a list of contact info
 
         Returns
         -------
-        dict:
-            A dict from resourceName to a dict of info, eg
-            {
-                'rname0':
-                    {
-                        'last_update': datetime
-                        'body': { ... }
-                    },
-                'rname1':
-                    {
-                        'last_update': datetime
-                        'body': { ... }
-                    },
-                ...
-            }
-
-            the body itself is a dict that has been sanitized so it doesn't
-            include metadata, etag fields, and moreover each of the values
-            doesn't have metadata in it.  This is so we can use it for
-            adding/updating
+        list:
+            A list of dicts containing rn, tag, updated, name, eg
+            [
+                {
+                    'rn': resource name,
+                    'tag': the csync_id,
+                    'updated': datetime,
+                    'name': the display name
+                } ...
+            ]
         """
 
-        return {
-            p['resourceName']: {
-                'last_update': dateutil.parser.isoparse(
+        self.info = [
+            {
+                'rn': p['resourceName'],
+                'tag': tagls[0] if (tagls := [
+                        kv['value']
+                        for kv in p.get('clientData', {})
+                        if kv.get('key', None) == SYNC_TAG
+                ])
+                else None,
+                'updated': dateutil.parser.isoparse(
                     p['metadata']['sources'][0]['updateTime']
                 ),
-                'body': self.__strip_body(p)
+                'name': p['names'][0]['displayName']
             }
             for p in self.__get_all_contacts()
-        }
+        ]
 
     def __get_all_contacts(self):
         """Return a list of all the contacts."""
@@ -191,7 +196,7 @@ class Contacts():
                 results = self.service.people().connections().list(
                         resourceName='people/me',
                         pageSize=1000,
-                        personFields='names,metadata',
+                        personFields='names,clientData,metadata',
                         pageToken=next_page_token
                         ).execute()
                 connections_list += results.get('connections', [])
@@ -200,16 +205,53 @@ class Contacts():
                 break
         return connections_list
 
-    def delete(self, id):
+    def delete(self, tag: str, verbose=False):
         """Delete a person
 
         Parameters
         ----------
-        id: str
-            This is the resourceName of the person to delete
+        tag: str
+            This is a tag to delete
 
         """
-        self.service.people().deleteContact(resourceName=id).execute()
+        # need to find the resource name
+        rnn = [(i['rn'], i['name']) for i in self.info if i['tag'] == tag]
+        for rn, n in rnn:
+            if verbose:
+                print(f'{n} ', end='')
+            self.service.people().deleteContact(resourceName=rn).execute()
+
+    def update_tag(self, rn: str, tag: str):
+        """Update the tag for a contact
+
+        Parameters
+        ---------
+        rn: str
+            The resource name of person to add tag to
+
+        tag: str
+            The tag to add.  No check on uniques is made, but it better be
+
+        """
+        # get the current etag and clientData
+        p = self.service.people().get(
+            resourceName=rn,
+            personFields='clientData'
+        ).execute()
+
+        # get the clientData without the tag dict
+        wout = [
+            i
+            for i in p.get('clientData', [])
+            if i.get('key', None) != SYNC_TAG
+        ]
+        wout.append({'key': SYNC_TAG, 'value': tag})
+
+        self.service.people().updateContact(
+            resourceName=rn,
+            updatePersonFields='clientData',
+            body={'etag': p['etag'], 'clientData': wout}
+        ).execute()
 
     def add(self, body):
         """Add a person with this body
@@ -226,14 +268,31 @@ class Contacts():
         ).execute()
         return new_contact
 
-    def update(self, id, foo):
-        pass
+    def update(self, tag: str, body: dict, verbose=False):
+        # need to find the resource name
+        rnn = [(i['rn'], i['name']) for i in self.info if i['tag'] == tag][0]
+        if verbose:
+            print(f'{rnn[1]} ', end='')
 
-    def get(self, id):
+        # get the current etag
+        p = self.service.people().get(
+            resourceName=rnn[0],
+        ).execute()
+
+        print(p)
+
+        body.update({'etag': p['etag']})
+        self.service.people().updateContact(
+            resourceName=rnn[0],
+            updatePersonFields=','.join(all_person_fields),
+            body=body
+        ).execute()
+
+    def get(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
 
         p = self.service.people().get(
-            resourceName=id,
+            resourceName=rn,
             personFields=','.join(all_person_fields)
         ).execute()
         return self.__strip_body(p)
