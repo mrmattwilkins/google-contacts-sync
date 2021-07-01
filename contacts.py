@@ -288,6 +288,13 @@ class Contacts():
             body=body
         ).execute()
 
+    def name_to_rn(self, name):
+        stuff = [i['rn'] for i in self.info if i['name'] == name]
+        if stuff:
+            return stuff[0]
+        else:
+            return None
+
     def get(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
 

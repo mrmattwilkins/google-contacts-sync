@@ -32,6 +32,21 @@ def vprint(*a, **vargs):
         print(*a, **vargs)
 
 
+def duplicates(ls: list):
+    """Return a set of duplicates."""
+
+    seen = set([])
+    dups = set([])
+
+    for x in ls:
+        if x in seen:
+            dups.add(x)
+        else:
+            seen.add(x)
+
+    return dups
+
+
 def load_config(cfile):
     """Return the config, or make a default one.
 
@@ -88,10 +103,25 @@ def save_config(cp, cfile):
 # parse command line
 p = argparse.ArgumentParser(
     description="""
-Sync google contacts
+Sync google contacts.
+
+If you have previously used github.com/michael-adler/sync-google-contacts which
+uses the csync-uid, after enabling the People API on all your accounts,
+editting your config file (you will be prompted about that), you should be all
+good to go.
+
+If you haven't synced contacts before you will have to go through an --init
+phase, again you will be prompted.
+
+For full instructions see
+https://github.com/mrmattwilkins/google-contacts-sync
     """,
     epilog="""""",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
+)
+p.add_argument(
+    '--init', action='store_true',
+    help="Initialize by syncing using names"
 )
 p.add_argument(
     '-v', '--verbose', action='store_true',
@@ -114,6 +144,57 @@ con = {
     cp[s]['user']: Contacts(cp[s]['keyfile'], cp[s]['credfile'])
     for s in cp.sections()
 }
+
+if args.init:
+    print("Setting up syncing using names to identify identical contacts")
+
+    # get all the names to see if there are duplicates
+    for email, acc in con.items():
+        dups = duplicates([i['name'] for i in acc.info])
+        if dups:
+            print('')
+            print(
+                f"These contacts ({','.join(dups)}) are duplicated in account "
+                f"{email}. I will not continue, this will cause confusion"
+            )
+            print('')
+            print("Please remove your duplicates and try again")
+            sys.exit(1)
+
+    # keep track of who we have synced so we don't redo them on next account
+    done = set([])
+    for email, acc in con.items():
+        # number seen before by this account
+        ndone = 0
+        for p in acc.info:
+            if p['name'] in done:
+                ndone += 1
+            else:
+                if p['tag'] is None:
+                    p['tag'] = new_tag()
+                    acc.update_tag(p['rn'], p['tag'])
+                newcontact = acc.get(p['rn'])
+                for otheremail, otheracc in con.items():
+                    if otheracc == acc:
+                        continue
+                    rn = otheracc.name_to_rn(p['name'])
+                    if rn:
+                        otheracc.update_tag(rn, p['tag'])
+                        otheracc.update(p['tag'], newcontact)
+                    else:
+                        otheracc.add(newcontact)
+                done.add(p['name'])
+
+            print(
+                f"Pushing {email} (tot {len(acc.info)}): "
+                "synced {len(acc.info) - ndone}, done before {ndone}",
+                end='\r',
+                flush=True
+            )
+        print('')
+
+sys.exit(0)
+
 
 # if an account has no sync tags, the user needs to do a --init
 vprint('Checking no new accounts')
@@ -216,41 +297,3 @@ for tag, aus in t2au.items():
         if acc == newest:
             continue
         acc.update(tag, contact, verbose=args.verbose)
-
-
-
-
-
-
-# now let us check for anyone who has been modified since 
-sys.exit(0)
-
-
-
-matt = Contacts(
-    '/home/m/mwilkins/.google/mrmattwilkins_keyfile.json',
-    'mrmattwilkins_creds'
-)
-
-cn = matt.contacts
-
-# get a random person
-rn = list(cn.keys())[0]
-luke = matt.get(rn)
-
-luke['names'][0]['displayName'] = 'Luke Foooy'
-luke['names'][0]['familyName'] = 'Foooy'
-
-print("FDFD")
-for k, v in luke.items():
-    print(k, v)
-
-# import sys
-# sys.exit(0)
-
-matt.add(luke)
-
-
-print("After")
-for k, v in luke.items():
-    print(k, v)
