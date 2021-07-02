@@ -27,13 +27,8 @@ def new_tag():
     return t
 
 
-def vprint(*a, **vargs):
-    if args.verbose:
-        print(*a, **vargs)
-
-
 def duplicates(ls: list):
-    """Return a set of duplicates."""
+    """Return a set of duplicates in a list."""
 
     seen = set([])
     dups = set([])
@@ -45,6 +40,11 @@ def duplicates(ls: list):
             seen.add(x)
 
     return dups
+
+
+def vprint(*a, **vargs):
+    if args.verbose:
+        print(*a, **vargs)
 
 
 def load_config(cfile):
@@ -68,7 +68,8 @@ def load_config(cfile):
         cp = configparser.ConfigParser()
 
         cp['DEFAULT'] = {
-            'msg': 'You need an account section for each user, please setup'
+            'msg': 'You need an account section for each user, please setup',
+            'last': '1972-01-01:T00:00:00+00.00'
         }
         cp['account-FIXME'] = {
             'user': 'FIXME@gmail.com',
@@ -150,7 +151,7 @@ if args.init:
 
     # get all the names to see if there are duplicates
     for email, acc in con.items():
-        dups = duplicates([i['name'] for i in acc.info])
+        dups = duplicates([i['name'] for i in acc.info.values()])
         if dups:
             print('')
             print(
@@ -164,42 +165,45 @@ if args.init:
     # keep track of who we have synced so we don't redo them on next account
     done = set([])
     for email, acc in con.items():
-        # number seen before by this account
+        # number seen before by this account, and number pushed
         ndone = 0
-        for p in acc.info:
+        nsync = 0
+        for rn, p in acc.info.items():
             if p['name'] in done:
                 ndone += 1
             else:
                 if p['tag'] is None:
                     p['tag'] = new_tag()
-                    acc.update_tag(p['rn'], p['tag'])
-                newcontact = acc.get(p['rn'])
+                    acc.update_tag(rn, p['tag'])
+                newcontact = acc.get(rn)
                 for otheremail, otheracc in con.items():
                     if otheracc == acc:
                         continue
                     rn = otheracc.name_to_rn(p['name'])
                     if rn:
                         otheracc.update_tag(rn, p['tag'])
-                        otheracc.update(p['tag'], newcontact)
+                        otheracc.update(p['tag'], newcontact, args.verbose)
                     else:
                         otheracc.add(newcontact)
                 done.add(p['name'])
+                nsync += 1
 
             print(
                 f"Pushing {email} (tot {len(acc.info)}): "
-                "synced {len(acc.info) - ndone}, done before {ndone}",
+                f"synced {nsync}, done before {ndone}",
                 end='\r',
                 flush=True
             )
         print('')
 
-sys.exit(0)
-
+    # update the last updated field
+    save_config(cp, cfile)
+    sys.exit(0)
 
 # if an account has no sync tags, the user needs to do a --init
 vprint('Checking no new accounts')
 for email, acc in con.items():
-    if all([i['tag'] is None for i in acc.info]):
+    if all([v['tag'] is None for v in acc.info.values()]):
         print(
             f'{email} has no sync tags.  It looks like this is the first time '
             'running this script for this account.  You need to pass --init '
@@ -210,25 +214,26 @@ for email, acc in con.items():
 # we need a full set of tags so we can detect changes.  ignore those that don't
 # have a tag yet, they will be additions
 for email, acc in con.items():
-    all_sync_tags.update([i['tag'] for i in acc.info if i['tag'] is not None])
+    all_sync_tags.update([
+        v['tag'] for v in acc.info.values() if v['tag'] is not None
+    ])
 
 # deletions are detected by missing tags, store the tags to delete in here
 vprint('Checking what to delete')
 todel = set([])
 for email, acc in con.items():
     # tags in acc
-    tags = set(i['tag'] for i in acc.info if i['tag'] is not None)
-    # print(email)
-    # print(t2rn)
+    tags = set(v['tag'] for v in acc.info.values() if v['tag'] is not None)
     rm = all_sync_tags - tags
     if rm:
         vprint(f'{email}: {len(rm)} contact(s) deleted')
     todel.update(rm)
-for email, acc in con.items():
-    vprint(f'removing contacts from {email}: ', end='')
-    for tag in todel:
-        acc.delete(tag, verbose=args.verbose)
-    vprint('')
+if todel:
+    for email, acc in con.items():
+        vprint(f'removing contacts from {email}: ', end='')
+        for tag in todel:
+            acc.delete(tag, verbose=args.verbose)
+        vprint('')
 
 # if there was anything deleted, get all contact info again (so those removed
 # are gone from our cached lists)
@@ -238,62 +243,63 @@ if todel:
 
 # new people won't have a tag
 vprint('Checking for new people')
-addedsomeone = False
+added = []
 for email, acc in con.items():
     # maps tag to (rn, name)
     toadd = [
-        (i['rn'], i['name'])
-        for i in acc.info if i['tag'] is None
+        (rn, v['name'])
+        for rn, v in acc.info.items() if v['tag'] is None
     ]
     if toadd:
-        addedsomeone = True
         vprint(f'{email}: these are new {list(i[1] for i in toadd)}')
-    for i in toadd:
+    for rn, name in toadd:
+
         # assign a new tag to this person
         tag = new_tag()
-        acc.update_tag(i[0], tag)
-        newcontact = acc.get(i[0])
+        acc.update_tag(rn, tag)
+        newcontact = acc.get(rn)
+
+        # record this is a new person so we won't try syncing them laster
+        added.append((acc, rn))
+
         # now add them to all the other accounts
         for otheremail, other in con.items():
             if other == acc:
                 continue
-            vprint(f'adding {i[1]} to {otheremail}')
-            other.add(newcontact)
+            vprint(f'adding {name} to {otheremail}')
+            p = other.add(newcontact)
+            added.append((other, p['resourceName']))
 
 # updates.  we want to see who has been modified since last run.  of course
-# anyone just added will have been modified.  to avoid updating them, we just
-# quit if there have been any additions.  it just makes things easier to only
-# perform updates when there have been no deletions/additions.  after all this
-# is a sync program that runs frequently.
-if todel or addedsomeone:
-    save_config(cp, cfile)
-    sys.exit(0)
-
+# anyone just added will have been modified, so ignore those in added
 
 lastupdate = dateutil.parser.isoparse(cp['DEFAULT']['last'])
 
-# maps tag to [(acc, update)] where update must be newer than our last run
-t2au = {}
+# maps tag to [(acc, rn, updated)] where update must be newer than our last run
+t2aru = {}
 
 for email, acc in con.items():
-    for i in acc.info:
-        print(i['updated'], lastupdate)
-
-
-for email, acc in con.items():
-    tu = [
-        (i['tag'], i['update'])
-        for i in acc.info if i['updated'] > lastupdate
+    tru = [
+        (v['tag'], rn, v['updated'])
+        for rn, v in acc.info.items()
+        if v['updated'] > lastupdate and (acc, rn) not in added
     ]
-    for t, u in tu:
-        t2au.setdefault(t, []).append((acc, u))
+    for t, rn, u in tru:
+        t2aru.setdefault(t, []).append((acc, rn, u))
 
-vprint(f"There are {len(t2au)} contacts to update")
-for tag, aus in t2au.items():
+vprint(f"There are {len(t2aru)} contacts to update")
+for tag, val in t2aru.items():
     # find the account with most recent update
-    newest = max(aus, key=lambda x: x[1])[0]
-    contact = newest.get(tag)
-    for email, acc in con.items():
-        if acc == newest:
+    newest = max(val, key=lambda x: x[2])
+    acc, rn = newest[:2]
+    vprint(f"{acc.info[rn]['name']}: ", end='')
+    contact = acc.get(rn)
+    for otheremail, otheracc in con.items():
+        if otheracc == acc:
             continue
-        acc.update(tag, contact, verbose=args.verbose)
+        vprint(f"{otheremail} ", end='')
+        otheracc.update(tag, contact, verbose=args.verbose)
+    vprint('')
+
+# update the last updated field
+save_config(cp, cfile)

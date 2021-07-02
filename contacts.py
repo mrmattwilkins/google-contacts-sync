@@ -49,6 +49,31 @@ all_person_fields = [
     'urls',
     'userDefined'
 ]
+all_update_person_fields = [
+    'addresses',
+    'biographies',
+    'birthdays',
+    'clientData',
+    'emailAddresses',
+    'events',
+    'externalIds',
+    'genders',
+    'imClients',
+    'interests',
+    'locales',
+    'locations',
+    'memberships',
+    'miscKeywords',
+    'names',
+    'nicknames',
+    'occupations',
+    'organizations',
+    'phoneNumbers',
+    'relations',
+    'sipAddresses',
+    'urls',
+    'userDefined'
+]
 
 
 class Contacts():
@@ -151,25 +176,34 @@ class Contacts():
         return ret
 
     def get_info(self):
-        """Store a list of contact info
+        """Store a dict of contact info
 
         Returns
         -------
-        list:
-            A list of dicts containing rn, tag, updated, name, eg
-            [
-                {
-                    'rn': resource name,
-                    'tag': the csync_id,
-                    'updated': datetime,
-                    'name': the display name
-                } ...
-            ]
+        dict:
+            A dict of dicts tag, etag, updated, name
+            {
+                'rn0':
+                    {
+                        'etag': str
+                        'tag': the csync_id (possibly None for newly added)
+                        'updated': datetime,
+                        'name': the display name
+                    },
+                'rn1':
+                    {
+                        'etag': str
+                        'tag': the csync_id (possibly None for newly added)
+                        'updated': datetime,
+                        'name': the display name
+                    },
+                ...
+            }
         """
 
-        self.info = [
-            {
-                'rn': p['resourceName'],
+        self.info = {
+            p['resourceName']: {
+                'etag': p['etag'],
                 'tag': tagls[0] if (tagls := [
                         kv['value']
                         for kv in p.get('clientData', {})
@@ -182,7 +216,7 @@ class Contacts():
                 'name': p['names'][0]['displayName']
             }
             for p in self.__get_all_contacts()
-        ]
+        }
 
     def __get_all_contacts(self):
         """Return a list of all the contacts."""
@@ -205,6 +239,22 @@ class Contacts():
                 break
         return connections_list
 
+    def tag_to_rn(self, tag):
+        """Return the resourceName for this tag, or None"""
+        rn = [rn for rn, v in self.info.items() if v['tag'] == tag]
+        if not rn:
+            return None
+        assert(len(rn) == 1)
+        return rn[0]
+
+    def name_to_rn(self, name):
+        """Return the resourceName for this name, or None"""
+        rn = [rn for rn, v in self.info.items() if v['name'] == name]
+        if not rn:
+            return None
+        assert(len(rn) == 1)
+        return rn[0]
+
     def delete(self, tag: str, verbose=False):
         """Delete a person
 
@@ -215,11 +265,13 @@ class Contacts():
 
         """
         # need to find the resource name
-        rnn = [(i['rn'], i['name']) for i in self.info if i['tag'] == tag]
-        for rn, n in rnn:
-            if verbose:
-                print(f'{n} ', end='')
-            self.service.people().deleteContact(resourceName=rn).execute()
+        rn = self.tag_to_rn(tag)
+        if rn is None:
+            return
+
+        if verbose:
+            print(f"{self.info[rn]['name']} ", end='')
+        self.service.people().deleteContact(resourceName=rn).execute()
 
     def update_tag(self, rn: str, tag: str):
         """Update the tag for a contact
@@ -233,13 +285,13 @@ class Contacts():
             The tag to add.  No check on uniques is made, but it better be
 
         """
-        # get the current etag and clientData
+        # get the current clientData
         p = self.service.people().get(
             resourceName=rn,
             personFields='clientData'
         ).execute()
 
-        # get the clientData without the tag dict
+        # the clientData without the tag dict
         wout = [
             i
             for i in p.get('clientData', [])
@@ -250,7 +302,7 @@ class Contacts():
         self.service.people().updateContact(
             resourceName=rn,
             updatePersonFields='clientData',
-            body={'etag': p['etag'], 'clientData': wout}
+            body={'etag': self.info[rn]['etag'], 'clientData': wout}
         ).execute()
 
     def add(self, body):
@@ -269,31 +321,13 @@ class Contacts():
         return new_contact
 
     def update(self, tag: str, body: dict, verbose=False):
-        # need to find the resource name
-        rnn = [(i['rn'], i['name']) for i in self.info if i['tag'] == tag][0]
-        if verbose:
-            print(f'{rnn[1]} ', end='')
-
-        # get the current etag
-        p = self.service.people().get(
-            resourceName=rnn[0],
-        ).execute()
-
-        print(p)
-
-        body.update({'etag': p['etag']})
+        rn = self.tag_to_rn(tag)
+        body.update({'etag': self.info[rn]['etag']})
         self.service.people().updateContact(
-            resourceName=rnn[0],
-            updatePersonFields=','.join(all_person_fields),
+            resourceName=rn,
+            updatePersonFields=','.join(all_update_person_fields),
             body=body
         ).execute()
-
-    def name_to_rn(self, name):
-        stuff = [i['rn'] for i in self.info if i['name'] == name]
-        if stuff:
-            return stuff[0]
-        else:
-            return None
 
     def get(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
@@ -303,3 +337,4 @@ class Contacts():
             personFields=','.join(all_person_fields)
         ).execute()
         return self.__strip_body(p)
+
