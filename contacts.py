@@ -201,22 +201,21 @@ class Contacts():
             }
         """
 
-        self.info = {
-            p['resourceName']: {
+        self.info = {}
+        for p in self.__get_all_contacts():
+            tagls = [
+                kv['value']
+                for kv in p.get('clientData', {})
+                if kv.get('key', None) == SYNC_TAG
+            ]
+            self.info[p['resourceName']] = {
                 'etag': p['etag'],
-                'tag': tagls[0] if (tagls := [
-                        kv['value']
-                        for kv in p.get('clientData', {})
-                        if kv.get('key', None) == SYNC_TAG
-                ])
-                else None,
+                'tag': tagls[0] if tagls else None,
                 'updated': dateutil.parser.isoparse(
                     p['metadata']['sources'][0]['updateTime']
                 ),
                 'name': p['names'][0]['displayName']
             }
-            for p in self.__get_all_contacts()
-        }
 
     def __get_all_contacts(self):
         """Return a list of all the contacts."""

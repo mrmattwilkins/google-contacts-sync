@@ -21,8 +21,9 @@ all_sync_tags = set([])
 def new_tag():
     """Return a new unique sync tag"""
     le = string.ascii_lowercase
-    while (t := ''.join(random.choices(le, k=20))) in all_sync_tags:
-        pass
+    t = ''.join(random.choices(le, k=20))
+    while t in all_sync_tags:
+        t = ''.join(random.choices(le, k=20))
     all_sync_tags.add(t)
     return t
 
