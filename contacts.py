@@ -337,4 +337,3 @@ class Contacts():
             personFields=','.join(all_person_fields)
         ).execute()
         return self.__strip_body(p)
-
