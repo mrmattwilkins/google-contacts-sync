@@ -2,7 +2,7 @@
 
 Sync the contacts of a bunch of google accounts using the People API.
 
-Groups are not synced,, just individual contacts.
+Groups are not synced, just individual contacts.
 
 # Setup
 
@@ -64,7 +64,7 @@ Groups are not synced,, just individual contacts.
 
 7. Now you are ready to do syncing.  If you have previously used a google
    contacts syncer that uses the `csync-uid` field 
-   (such as [Michael Adlers](https://github.com/michael-adler/sync-google-contacts)
+   (such as [Michael Adlers](https://github.com/michael-adler/sync-google-contacts))
    then you are good to go and can just start running the `sync.py`
    periodically.  However if this is the first time doing syncing then you will
    have to initialize things.  This is where contacts a matched up using their
@@ -76,6 +76,7 @@ Groups are not synced,, just individual contacts.
 
    and let it run.  It will take ages, but will give you updates.  After this
    every contact will have a `csync-uid` field, unique across all your
-   accounts.  So you can update peoples names and syncing will just work.  If
-   you ever add another account you will have to run the --init again.  
+   accounts.  So you can change peoples names if you want and syncing will just
+   work because the `csync-uid` is used to identify people.  If you ever add
+   another account you will have to run the --init again.  
 
