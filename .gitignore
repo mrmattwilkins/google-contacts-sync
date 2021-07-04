@@ -1,2 +1,3 @@
 *.ipynb
 *creds
+__pycache__
