@@ -340,3 +340,28 @@ class Contacts():
             personFields=','.join(all_person_fields)
         ).execute()
         return self.__strip_body(p)
+
+    def get_all_emails(self):
+        """Return a list of all the email addresses.
+
+        We don't need this for syncing, but it is handy if you want to dump out
+        email addresses
+        """
+
+        # Keep getting 1000 connections until the nextPageToken becomes None
+        connections_list = []
+        next_page_token = ''
+        while True:
+            if not (next_page_token is None):
+                # Call the People API
+                results = self.service.people().connections().list(
+                        resourceName='people/me',
+                        pageSize=1000,
+                        personFields='names,emailAddresses',
+                        pageToken=next_page_token
+                        ).execute()
+                connections_list += results.get('connections', [])
+                next_page_token = results.get('nextPageToken')
+            else:
+                break
+        return connections_list
