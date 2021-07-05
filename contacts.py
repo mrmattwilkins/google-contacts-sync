@@ -248,7 +248,11 @@ class Contacts():
 
     def name_to_rn(self, name):
         """Return the resourceName for this name, or None"""
-        rn = [rn for rn, v in self.info.items() if v['name'] == name]
+        rn = [
+            rn
+            for rn, v in self.info.items()
+            if v['name'].lower() == name.lower()
+        ]
         if not rn:
             return None
         assert(len(rn) == 1)
