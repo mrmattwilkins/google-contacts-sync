@@ -160,7 +160,21 @@ class Contacts():
         dict:
             Like body but without resourceName, etag, photos and metadata
             fields.  Also no metadata in each field (eg
-            ['names'][0]['metadata']).
+            ['names'][0]['metadata']).  So the above example would be stripped
+            to
+            {
+                'names': [
+                    {
+                        'displayName': 'John Smith',
+                        'familyName': 'Smith',
+                        'givenName': 'John',
+                        'displayNameLastFirst': 'Smith, John',
+                        'unstructuredName': 'John Smith'
+                    }
+                ],
+                blah
+            }
+
         """
 
         # keep all_person_fields, but not photos/metadata
@@ -202,7 +216,7 @@ class Contacts():
         """
 
         self.info = {}
-        for p in self.__get_all_contacts():
+        for p in self.get_all_contacts():
             tagls = [
                 kv['value']
                 for kv in p.get('clientData', {})
@@ -217,7 +231,7 @@ class Contacts():
                 'name': p['names'][0]['displayName']
             }
 
-    def __get_all_contacts(self):
+    def get_all_contacts(self, fields=['names', 'clientData', 'metadata']):
         """Return a list of all the contacts."""
 
         # Keep getting 1000 connections until the nextPageToken becomes None
@@ -229,7 +243,7 @@ class Contacts():
                 results = self.service.people().connections().list(
                         resourceName='people/me',
                         pageSize=1000,
-                        personFields='names,clientData,metadata',
+                        personFields=','.join(fields),
                         pageToken=next_page_token
                         ).execute()
                 connections_list += results.get('connections', [])
@@ -340,28 +354,3 @@ class Contacts():
             personFields=','.join(all_person_fields)
         ).execute()
         return self.__strip_body(p)
-
-    def get_all_emails(self):
-        """Return a list of all the email addresses.
-
-        We don't need this for syncing, but it is handy if you want to dump out
-        email addresses
-        """
-
-        # Keep getting 1000 connections until the nextPageToken becomes None
-        connections_list = []
-        next_page_token = ''
-        while True:
-            if not (next_page_token is None):
-                # Call the People API
-                results = self.service.people().connections().list(
-                        resourceName='people/me',
-                        pageSize=1000,
-                        personFields='names,emailAddresses',
-                        pageToken=next_page_token
-                        ).execute()
-                connections_list += results.get('connections', [])
-                next_page_token = results.get('nextPageToken')
-            else:
-                break
-        return connections_list
