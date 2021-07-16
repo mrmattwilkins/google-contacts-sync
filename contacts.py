@@ -228,10 +228,15 @@ class Contacts():
                 'updated': dateutil.parser.isoparse(
                     p['metadata']['sources'][0]['updateTime']
                 ),
-                'name': p['names'][0]['displayName']
+                'name': (
+                    p['names'][0]['displayName']
+                    if 'names' in p else p['organizations'][0]['name']
+                )
             }
 
-    def get_all_contacts(self, fields=['names', 'clientData', 'metadata']):
+    def get_all_contacts(
+        self, fields=['names', 'organizations', 'clientData', 'metadata']
+    ):
         """Return a list of all the contacts."""
 
         # Keep getting 1000 connections until the nextPageToken becomes None
