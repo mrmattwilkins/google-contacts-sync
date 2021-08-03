@@ -109,7 +109,8 @@ class Contacts():
         self.get_info()
 
     def __strip_body(self, body):
-        """Return a person body without photos/metadata and other things
+        """Return a person body without coverPhotos/photos/metadata 
+        and some other things
 
         We need just this info about a person when we do an update or add, the
         photos field doesn't work with People API at the moment, and you don't
@@ -158,8 +159,8 @@ class Contacts():
         Returns
         -------
         dict:
-            Like body but without resourceName, etag, photos and metadata
-            fields.  Also no metadata in each field (eg
+            Like body but without resourceName, etag, coverPhotos, photos and
+            metadata fields.  Also no metadata in each field (eg
             ['names'][0]['metadata']).  So the above example would be stripped
             to
             {
@@ -178,7 +179,8 @@ class Contacts():
         """
 
         # keep all_person_fields, but not photos/metadata
-        tokeep = set(all_person_fields) - set(['metadata', 'photos'])
+        bad = set(['metadata', 'coverPhotos', 'photos'])
+        tokeep = set(all_person_fields) - bad
         ret = {k: v for k, v in body.items() if k in tokeep}
 
         # all the other fields are lists of dicts, we must drop the metadata
@@ -186,6 +188,12 @@ class Contacts():
         for k, v in ret.items():
             for i in v:
                 i.pop('metadata', None)
+
+        # for some reason some of my contacts have more than one name.  remove
+        # anything except the first.  same problem with genders.
+        ret['names'] = [ret['names'][0]]
+        if 'genders' in ret:
+            ret['genders'] = [ret['genders'][0]]
 
         return ret
 
