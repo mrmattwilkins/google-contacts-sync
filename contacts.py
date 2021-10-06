@@ -4,7 +4,10 @@ import pickle
 import os.path
 import dateutil.parser
 
+from time import sleep
+
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
@@ -230,17 +233,18 @@ class Contacts():
                 for kv in p.get('clientData', {})
                 if kv.get('key', None) == SYNC_TAG
             ]
-            self.info[p['resourceName']] = {
-                'etag': p['etag'],
-                'tag': tagls[0] if tagls else None,
-                'updated': dateutil.parser.isoparse(
-                    p['metadata']['sources'][0]['updateTime']
-                ),
-                'name': (
-                    p['names'][0]['displayName']
-                    if 'names' in p else p['organizations'][0]['name']
-                )
-            }
+            if 'names' in p:
+                self.info[p['resourceName']] = {
+                    'etag': p['etag'],
+                    'tag': tagls[0] if tagls else None,
+                    'updated': dateutil.parser.isoparse(
+                        p['metadata']['sources'][0]['updateTime']
+                    ),
+                    'name': (
+                        p['names'][0]['displayName']
+                        if 'names' in p else p['organizations'][0]['name']
+                    )
+                }
 
     def get_all_contacts(
         self, fields=['names', 'organizations', 'clientData', 'metadata']
@@ -316,24 +320,29 @@ class Contacts():
 
         """
         # get the current clientData
-        p = self.service.people().get(
-            resourceName=rn,
-            personFields='clientData'
-        ).execute()
+        try:
+            p = self.service.people().get(
+                resourceName=rn,
+                personFields='clientData'
+            ).execute()
 
-        # the clientData without the tag dict
-        wout = [
-            i
-            for i in p.get('clientData', [])
-            if i.get('key', None) != SYNC_TAG
-        ]
-        wout.append({'key': SYNC_TAG, 'value': tag})
+            # the clientData without the tag dict
+            wout = [
+                i
+                for i in p.get('clientData', [])
+                if i.get('key', None) != SYNC_TAG
+            ]
+            wout.append({'key': SYNC_TAG, 'value': tag})
 
-        self.service.people().updateContact(
-            resourceName=rn,
-            updatePersonFields='clientData',
-            body={'etag': self.info[rn]['etag'], 'clientData': wout}
-        ).execute()
+            self.service.people().updateContact(
+                resourceName=rn,
+                updatePersonFields='clientData',
+                body={'etag': self.info[rn]['etag'], 'clientData': wout}
+            ).execute()
+        except HttpError as e:
+            # added a little sleep to avoid 429 HTTP error because rate limit
+            sleep(1)
+            self.update_tag(rn, tag)
 
     def add(self, body):
         """Add a person with this body
@@ -352,12 +361,20 @@ class Contacts():
 
     def update(self, tag: str, body: dict, verbose=False):
         rn = self.tag_to_rn(tag)
-        body.update({'etag': self.info[rn]['etag']})
-        self.service.people().updateContact(
-            resourceName=rn,
-            updatePersonFields=','.join(all_update_person_fields),
-            body=body
-        ).execute()
+
+        if not (rn is None):
+            try:
+                body.update({'etag': self.info[rn]['etag']})
+                self.service.people().updateContact(
+                    resourceName=rn,
+                    updatePersonFields=','.join(all_update_person_fields),
+                    body=body
+                ).execute()
+
+            except HttpError as e:
+                # added a little sleep to avoid 429 HTTP error because rate limit
+                sleep(1)
+                self.update(tag, body, verbose)
 
     def get(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
