@@ -362,7 +362,7 @@ class Contacts():
     def update(self, tag: str, body: dict, verbose=False):
         rn = self.tag_to_rn(tag)
 
-        if not (rn is None):
+        if rn is not None:
             try:
                 body.update({'etag': self.info[rn]['etag']})
                 self.service.people().updateContact(
