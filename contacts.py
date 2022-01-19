@@ -233,18 +233,20 @@ class Contacts():
                 for kv in p.get('clientData', {})
                 if kv.get('key', None) == SYNC_TAG
             ]
-            if 'names' in p:
-                self.info[p['resourceName']] = {
-                    'etag': p['etag'],
-                    'tag': tagls[0] if tagls else None,
-                    'updated': dateutil.parser.isoparse(
-                        p['metadata']['sources'][0]['updateTime']
-                    ),
-                    'name': (
-                        p['names'][0]['displayName']
-                        if 'names' in p else p['organizations'][0]['name']
-                    )
-                }
+            if not ('names' in p or 'organizations' in p):
+                continue
+
+            self.info[p['resourceName']] = {
+                'etag': p['etag'],
+                'tag': tagls[0] if tagls else None,
+                'updated': dateutil.parser.isoparse(
+                    p['metadata']['sources'][0]['updateTime']
+                ),
+                'name': (
+                    p['names'][0]['displayName']
+                    if 'names' in p else p['organizations'][0]['name']
+                )
+            }
 
     def get_all_contacts(
         self, fields=['names', 'organizations', 'clientData', 'metadata']
