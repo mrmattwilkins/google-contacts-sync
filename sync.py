@@ -63,7 +63,7 @@ def load_config(cfile):
         otherwise just exit
 
     """
-
+    print(f"loaded {cfile}")
     # put in default config file if necessary
     if not cfile.exists():
         cp = configparser.ConfigParser()
@@ -143,7 +143,7 @@ cp = load_config(cfile)
 # get the contacts for each user
 vprint('Getting contacts')
 con = {
-    cp[s]['user']: Contacts(cp[s]['keyfile'], cp[s]['credfile'])
+    cp[s]['user']: Contacts(cp[s]['keyfile'], cp[s]['credfile'], cp[s]['user'])
     for s in cp.sections()
 }
 

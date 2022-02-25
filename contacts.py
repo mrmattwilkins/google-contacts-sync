@@ -81,7 +81,7 @@ all_update_person_fields = [
 
 class Contacts():
 
-    def __init__(self, keyfile, credfile):
+    def __init__(self, keyfile, credfile,user):
 
         creds = None
 
@@ -97,6 +97,7 @@ class Contacts():
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
+                print("login to:",user)
                 flow = InstalledAppFlow.from_client_secrets_file(
                     keyfile, SCOPES
                 )
@@ -355,7 +356,7 @@ class Contacts():
             Maps all_person_fields to lists of dicts with info in them.
 
         """
-
+        print(body)
         new_contact = self.service.people().createContact(
             body=body
         ).execute()
