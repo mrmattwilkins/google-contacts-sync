@@ -212,6 +212,110 @@ for email, acc in con.items():
         )
         sys.exit(2)
 
+
+#Sync ContactGroup
+print("sync ContactGroups")
+all_sync_tags_ContactGroups = set([])
+for email, acc in con.items():
+    all_sync_tags_ContactGroups.update([
+        v['tag'] for v in acc.infoGroup.values() if v['tag'] is not None
+    ])
+
+
+# deletions are detected by missing tags, store the tags to delete in here
+print('ContactGroups - Checking what to delete')
+todel = set([])
+for email, acc in con.items():
+    # tags in acc
+    tags = set(v['tag'] for v in acc.infoGroup.values() if v['tag'] is not None)
+    rm = all_sync_tags_ContactGroups - tags
+    if rm:
+        print(f'{email}: {len(rm)} ContactGroup(s) deleted')
+    todel.update(rm)
+if todel:
+    for email, acc in con.items():
+        print(f'removing ContactGroups from {email}: ', end='')
+        for tag in todel:
+            acc.deleteContactGroup(tag)
+        vprint('')
+
+
+# if there was anything deleted, get all contact info again (so those removed
+# are gone from our cached lists)
+if todel:
+    for acc in con.values():
+        acc.get_info()
+
+
+# new group won't have a tag
+vprint('Checking for new ContactGroup')
+added = []
+for email, acc in con.items():
+    # maps tag to (rn, name)
+    toadd = [
+        (rn, v['name'])
+        for rn, v in acc.infoGroup.items() if v['tag'] is None
+    ]
+    if toadd:
+        vprint(f'{email}: these are new {list(i[1] for i in toadd)}')
+    for rn, name in toadd:
+
+        # assign a new tag to this ContactGroup
+        tag = new_tag()
+        acc.updateContactGroup_tag(rn, tag)
+        newcontact = acc.getContactGroup(rn)
+
+        # record this is a new ContactGroup so we won't try syncing them laster
+        added.append((acc, rn))
+
+        # now add them to all the other accounts
+        for otheremail, other in con.items():
+            if other == acc:
+                continue
+            vprint(f'adding {name} to {otheremail}')
+
+            tmp={"contactGroup":{"name":newcontact["name"],"clientData":newcontact["clientData"]}}
+            p = other.addContactGroup(tmp)
+            added.append((other, p['resourceName']))
+
+
+
+# updates.  we want to see who has been modified since last run.  of course
+# anyone just added will have been modified, so ignore those in added
+
+lastupdate = dateutil.parser.isoparse(cp['DEFAULT']['last'])
+
+# maps tag to [(acc, rn, updated)] where update must be newer than our last run
+t2aru = {}
+
+for email, acc in con.items():
+    tru = [
+        (v['tag'], rn, v['updated'])
+        for rn, v in acc.infoGroup.items()
+        if v['updated'] > lastupdate and (acc, rn) not in added
+    ]
+    for t, rn, u in tru:
+        t2aru.setdefault(t, []).append((acc, rn, u))
+
+vprint(f"There are {len(t2aru)} contacts to update")
+for tag, val in t2aru.items():
+    # find the account with most recent update
+    newest = max(val, key=lambda x: x[2])
+    acc, rn = newest[:2]
+    vprint(f"{acc.infoGroup[rn]['name']}: ", end='')
+    contactGroup = acc.getContactGroup(rn)
+    for otheremail, otheracc in con.items():
+        if otheracc == acc:
+            continue
+        vprint(f"{otheremail} ", end='')
+        otheracc.updateContactGroup(tag, contactGroup)
+    vprint('')
+
+
+exit()
+
+
+
 # we need a full set of tags so we can detect changes.  ignore those that don't
 # have a tag yet, they will be additions
 for email, acc in con.items():
