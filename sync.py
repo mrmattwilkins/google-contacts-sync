@@ -11,6 +11,7 @@ import string
 import datetime
 import dateutil
 import pytz
+import copy
 
 from contacts import Contacts
 
@@ -44,7 +45,7 @@ def duplicates(ls: list):
 
 
 def vprint(*a, **vargs):
-    if args.verbose:
+    #if args.verbose:
         print(*a, **vargs)
 
 
@@ -100,6 +101,11 @@ def save_config(cp, cfile):
     }
     with open(cfile, 'w') as cfh:
         cp.write(cfh)
+
+def remove_prefix(text, prefix):
+    if text.startswith(prefix):
+        return text[len(prefix):]
+    return text  # or whatever
 
 
 # parse command line
@@ -213,7 +219,20 @@ for email, acc in con.items():
         sys.exit(2)
 
 
+
+
+
+
+
+
+
+#
+#======================================
 #Sync ContactGroup
+#======================================
+#
+
+
 print("sync ContactGroups")
 all_sync_tags_ContactGroups = set([])
 for email, acc in con.items():
@@ -312,7 +331,15 @@ for tag, val in t2aru.items():
     vprint('')
 
 
-exit()
+
+
+
+
+#
+#======================================
+#Sync Contact
+#======================================
+#
 
 
 
@@ -361,18 +388,61 @@ for email, acc in con.items():
 
         # assign a new tag to this person
         tag = new_tag()
-        acc.update_tag(rn, tag)
+        acc.update_tag(rn, tag)               
         newcontact = acc.get(rn)
 
         # record this is a new person so we won't try syncing them laster
         added.append((acc, rn))
 
+            #AGGIUNTA PERSONA CON TAG
+            #prima di aggiungere una nuova persona, controllo in quali ContactGroup è
+            #se è solo in quello standard ( non ha label ) proseguo così
+            #se ne è 1 o più -> recupero il tag di sync dell'etichetta
+            #ricerco il tag nella lista delle etichette dell'altro account ( recupero il ResourceName )
+            # imposto il resource name corretto 
+
+        #recupero i RN delle label ( non myContacts)
+        groupRNs=[ 
+                group["contactGroupMembership"]["contactGroupResourceName"] 
+                for group in newcontact["memberships"] 
+                if group["contactGroupMembership"]["contactGroupId"]!="myContacts"
+                ]
+        #recupero le syncTag di ogni RN
+        groupTags=[ acc.rn_to_tag_ContactGroup(groupRN) for groupRN in groupRNs ] 
+
+
+        #tolgo tutte le label  ( non myContacts)
+        newcontact["memberships"] = [
+            group
+            for group in newcontact["memberships"] 
+            if group["contactGroupMembership"]["contactGroupId"]=="myContacts" 
+        ] 
+
+        p=None
+
         # now add them to all the other accounts
         for otheremail, other in con.items():
+
             if other == acc:
                 continue
             vprint(f'adding {name} to {otheremail}')
-            p = other.add(newcontact)
+
+            #se ci sono tag da sync 
+            if len(groupTags)>0:
+                newcontactCopy = copy.deepcopy(newcontact)
+                for groupTag in groupTags:
+                    #recupero il RN del client destinatario in base al tag di sync 
+                    groupRN_other= other.tag_to_rn_ContactGroup(groupTag)
+                    #lo aggiungi al contatto
+
+                    groupID_other=remove_prefix(groupRN_other,"contactGroups/")
+                    newcontactCopy["memberships"].append( {'contactGroupMembership': {'contactGroupId': groupID_other, 'contactGroupResourceName': groupRN_other}})
+                    
+                p = other.add(newcontactCopy)
+
+
+            else:   #se non ci sono , aggiungo e basta
+                p = other.add(newcontact)
             added.append((other, p['resourceName']))
 
 # updates.  we want to see who has been modified since last run.  of course
@@ -399,11 +469,51 @@ for tag, val in t2aru.items():
     acc, rn = newest[:2]
     vprint(f"{acc.info[rn]['name']}: ", end='')
     contact = acc.get(rn)
+
+     #TODO:
+        #prima di mandare l'update
+        #prendo tutti i RN delle label non mycontacts ( controllo che non vengano puliti prima...)
+        #recupero gli ID di sync delle Label
+        #per ciascuno sostituisco
+
+    #recupero i RN delle label ( non myContacts)
+    groupRNs=[ 
+            group["contactGroupMembership"]["contactGroupResourceName"] 
+            for group in contact["memberships"] 
+            if group["contactGroupMembership"]["contactGroupId"]!="myContacts"
+            ]
+    #recupero le syncTag di ogni RN
+    groupTags=[ acc.rn_to_tag_ContactGroup(groupRN) for groupRN in groupRNs ] 
+
+
+    #tolgo tutte le label  ( non myContacts)
+    contact["memberships"] = [
+        group
+        for group in contact["memberships"] 
+        if group["contactGroupMembership"]["contactGroupId"]=="myContacts" 
+    ] 
+
+  
+
+
     for otheremail, otheracc in con.items():
         if otheracc == acc:
             continue
         vprint(f"{otheremail} ", end='')
-        otheracc.update(tag, contact, verbose=args.verbose)
+
+        if len(groupTags)>0:
+                contactCopy = copy.deepcopy(contact)
+                for groupTag in groupTags:
+                    #recupero il RN del client destinatario in base al tag di sync 
+                    groupRN_other= otheracc.tag_to_rn_ContactGroup(groupTag)
+                    #lo aggiungi al contatto
+
+                    groupID_other=remove_prefix(groupRN_other,"contactGroups/")
+                    contactCopy["memberships"].append( {'contactGroupMembership': {'contactGroupId': groupID_other, 'contactGroupResourceName': groupRN_other}})
+                    
+                otheracc.update(tag, contactCopy, verbose=args.verbose)
+        else:
+            otheracc.update(tag, contact, verbose=args.verbose)
     vprint('')
 
 # update the last updated field

@@ -414,8 +414,16 @@ class Contacts():
 
     #label
 
+    def rn_to_tag_ContactGroup(self, rn):
+        """Return the resourceName for this tag, or None"""
 
-    def tag_to_rn_addContactGroup(self, tag):
+        tag = [v['tag'] for rn_loc, v in self.infoGroup.items() if rn_loc == rn]
+        if not tag:
+            return None
+        assert(len(tag) == 1)
+        return tag[0]
+
+    def tag_to_rn_ContactGroup(self, tag):
         """Return the resourceName for this tag, or None"""
         rn = [rn for rn, v in self.infoGroup.items() if v['tag'] == tag]
         if not rn:
@@ -507,7 +515,7 @@ class Contacts():
 
 
     def updateContactGroup(self, tag: str, body: dict):
-        rn = self.tag_to_rn_addContactGroup(tag)
+        rn = self.tag_to_rn_ContactGroup(tag)
 
         if rn is not None:
             try:
@@ -527,7 +535,7 @@ class Contacts():
 
     def deleteContactGroup(self,tag:str):
        # need to find the resource name
-        rn = self.tag_to_rn_addContactGroup(tag)
+        rn = self.tag_to_rn_ContactGroup(tag)
         if rn is None:
             return
 
