@@ -45,7 +45,7 @@ def duplicates(ls: list):
 
 
 def vprint(*a, **vargs):
-    #if args.verbose:
+    if args.verbose:
         print(*a, **vargs)
 
 
