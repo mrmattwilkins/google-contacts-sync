@@ -252,8 +252,8 @@ class Contacts():
                 )
             }
 
-        self.infoGroup = {}
-        for p in self.getContactGroups():
+        self.info_group = {}
+        for p in self.get_contactGroups():
             tagls = [
                 kv['value']
                 for kv in p.get('clientData', {})
@@ -262,7 +262,7 @@ class Contacts():
             if p["groupType"]!="USER_CONTACT_GROUP":
                 continue
 
-            self.infoGroup[p['resourceName']] = {
+            self.info_group[p['resourceName']] = {
                 'etag': p['etag'],
                 'tag': tagls[0] if tagls else None,
                 'updated': dateutil.parser.isoparse(
@@ -416,25 +416,25 @@ class Contacts():
 
     #label - contactGroup
 
-    def rn_to_tag_ContactGroup(self, rn):
+    def rn_to_tag_contactGroup(self, rn):
         """Return the resourceName for this tag, or None"""
 
-        tag = [v['tag'] for rn_loc, v in self.infoGroup.items() if rn_loc == rn]
+        tag = [v['tag'] for rn_loc, v in self.info_group.items() if rn_loc == rn]
         if not tag:
             return None
         assert(len(tag) == 1)
         return tag[0]
 
-    def tag_to_rn_ContactGroup(self, tag):
+    def tag_to_rn_contactGroup(self, tag):
         """Return the resourceName for this tag, or None"""
-        rn = [rn for rn, v in self.infoGroup.items() if v['tag'] == tag]
+        rn = [rn for rn, v in self.info_group.items() if v['tag'] == tag]
         if not rn:
             return None
         assert(len(rn) == 1)
         return rn[0]
 
 
-    def addContactGroup(self,body):
+    def add_contactGroup(self,body):
         """Add a person with this body
 
         Parameters
@@ -449,7 +449,7 @@ class Contacts():
         ).execute()
         return new_contact
 
-    def getContactGroups(self):
+    def get_contactGroups(self):
         #recupero la lista di ContactGroups
         """Return a list of all the ContactGroup."""
 
@@ -470,7 +470,7 @@ class Contacts():
                 break
         return ContactGroup_list
 
-    def getContactGroup(self,rn):
+    def get_contactGroup(self,rn):
         """Return a person body, stripped of resourceName/etag etc"""
 
         p = self.service.contactGroups().get(
@@ -479,7 +479,7 @@ class Contacts():
         ).execute()
         return p
 
-    def updateContactGroup_tag(self, rn: str, tag: str):
+    def update_contactGroup_tag(self, rn: str, tag: str):
         """Update the tag for a contact
 
         Parameters
@@ -508,40 +508,40 @@ class Contacts():
 
             self.service.contactGroups().update(
                 resourceName=rn,
-                body={ "contactGroup": {'etag': self.infoGroup[rn]['etag'], 'clientData': wout},"updateGroupFields": "clientData", "readGroupFields": "clientData,groupType,metadata,name"}
+                body={ "contactGroup": {'etag': self.info_group[rn]['etag'], 'clientData': wout},"updateGroupFields": "clientData", "readGroupFields": "clientData,groupType,metadata,name"}
             ).execute()
         except HttpError as e:
             # added a little sleep to avoid 429 HTTP error because rate limit
             sleep(1)
-            self.updateContactGroup_tag(rn, tag)
+            self.update_contactGroup_tag(rn, tag)
 
 
-    def updateContactGroup(self, tag: str, body: dict):
-        rn = self.tag_to_rn_ContactGroup(tag)
+    def update_contactGroup(self, tag: str, body: dict):
+        rn = self.tag_to_rn_contactGroup(tag)
 
         if rn is not None:
             try:
                 
                 self.service.contactGroups().update(
                     resourceName=rn,
-                    body={ "contactGroup": {'etag': self.infoGroup[rn]['etag'], 'name': body["name"]},"readGroupFields": "clientData,groupType,metadata,name"}
+                    body={ "contactGroup": {'etag': self.info_group[rn]['etag'], 'name': body["name"]},"readGroupFields": "clientData,groupType,metadata,name"}
                 ).execute()
 
             except HttpError as e:
                 # added a little sleep to avoid 429 HTTP error because rate limit
                 sleep(1)
-                self.updateContactGroup(tag, body)
+                self.update_contactGroup(tag, body)
 
         pass
 
 
-    def deleteContactGroup(self,tag:str):
+    def delete_contactGroup(self,tag:str):
        # need to find the resource name
-        rn = self.tag_to_rn_ContactGroup(tag)
+        rn = self.tag_to_rn_contactGroup(tag)
         if rn is None:
             return
 
-        print(f"{self.infoGroup[rn]['name']} ", end='')
+        print(f"{self.info_group[rn]['name']} ", end='')
         self.service.contactGroups().delete(resourceName=rn,deleteContacts=False).execute()
    
 

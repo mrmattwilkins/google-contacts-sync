@@ -237,7 +237,7 @@ vprint("ContactGroups synchronization...")
 all_sync_tags_ContactGroups = set([])
 for email, acc in con.items():
     all_sync_tags_ContactGroups.update([
-        v['tag'] for v in acc.infoGroup.values() if v['tag'] is not None
+        v['tag'] for v in acc.info_group.values() if v['tag'] is not None
     ])
 
 
@@ -246,7 +246,7 @@ vprint('ContactGroups - Checking what to delete')
 todel = set([])
 for email, acc in con.items():
     # tags in acc
-    tags = set(v['tag'] for v in acc.infoGroup.values() if v['tag'] is not None)
+    tags = set(v['tag'] for v in acc.info_group.values() if v['tag'] is not None)
     rm = all_sync_tags_ContactGroups - tags
     if rm:
         print(f'{email}: {len(rm)} ContactGroup(s) deleted')
@@ -255,7 +255,7 @@ if todel:
     for email, acc in con.items():
         print(f'removing ContactGroups from {email}: ', end='')
         for tag in todel:
-            acc.deleteContactGroup(tag)
+            acc.delete_contactGroup(tag)
         vprint('')
 
 
@@ -267,13 +267,13 @@ if todel:
 
 
 # new group won't have a tag
-vprint('Checking for new ContactGroup')
+vprint('ContactGroups - Checking for new ContactGroup')
 added = []
 for email, acc in con.items():
     # maps tag to (rn, name)
     toadd = [
         (rn, v['name'])
-        for rn, v in acc.infoGroup.items() if v['tag'] is None
+        for rn, v in acc.info_group.items() if v['tag'] is None
     ]
     if toadd:
         vprint(f'{email}: these are new {list(i[1] for i in toadd)}')
@@ -281,8 +281,8 @@ for email, acc in con.items():
 
         # assign a new tag to this ContactGroup
         tag = new_tag()
-        acc.updateContactGroup_tag(rn, tag)
-        newcontact = acc.getContactGroup(rn)
+        acc.update_contactGroup_tag(rn, tag)
+        newcontact = acc.get_contactGroup(rn)
 
         # record this is a new ContactGroup so we won't try syncing them laster
         added.append((acc, rn))
@@ -294,7 +294,7 @@ for email, acc in con.items():
             vprint(f'adding {name} to {otheremail}')
 
             tmp={"contactGroup":{"name":newcontact["name"],"clientData":newcontact["clientData"]}}
-            p = other.addContactGroup(tmp)
+            p = other.add_contactGroup(tmp)
             added.append((other, p['resourceName']))
 
 
@@ -310,13 +310,13 @@ t2aru = {}
 for email, acc in con.items():
     tru = [
         (v['tag'], rn, v['updated'])
-        for rn, v in acc.infoGroup.items()
+        for rn, v in acc.info_group.items()
         if v['updated'] > lastupdate and (acc, rn) not in added
     ]
     for t, rn, u in tru:
         t2aru.setdefault(t, []).append((acc, rn, u))
 
-vprint(f"There are {len(t2aru)} contacts to update")
+vprint(f"ContactGroups - There are {len(t2aru)} contactGroups to update")
 for tag, val in t2aru.items():
     # find the account with most recent update
     newest = max(val, key=lambda x: x[2])
@@ -327,7 +327,7 @@ for tag, val in t2aru.items():
         if otheracc == acc:
             continue
         vprint(f"{otheremail} ", end='')
-        otheracc.updateContactGroup(tag, contactGroup)
+        otheracc.update_contactGroup(tag, contactGroup)
     vprint('')
 
 
@@ -342,7 +342,7 @@ for tag, val in t2aru.items():
 #
 
 
-
+vprint(f"Contacts synchronization...")
 # we need a full set of tags so we can detect changes.  ignore those that don't
 # have a tag yet, they will be additions
 for email, acc in con.items():
@@ -408,7 +408,7 @@ for email, acc in con.items():
                 if group["contactGroupMembership"]["contactGroupId"]!="myContacts"
                 ]
         #recupero le syncTag di ogni RN
-        groupTags=[ acc.rn_to_tag_ContactGroup(groupRN) for groupRN in groupRNs ] 
+        groupTags=[ acc.rn_to_tag_contactGroup(groupRN) for groupRN in groupRNs ] 
 
 
         #tolgo tutte le label  ( non myContacts)
@@ -432,7 +432,7 @@ for email, acc in con.items():
                 newcontactCopy = copy.deepcopy(newcontact)
                 for groupTag in groupTags:
                     #recupero il RN del client destinatario in base al tag di sync 
-                    groupRN_other= other.tag_to_rn_ContactGroup(groupTag)
+                    groupRN_other= other.tag_to_rn_contactGroup(groupTag)
                     #lo aggiungi al contatto
 
                     groupID_other=remove_prefix(groupRN_other,"contactGroups/")
@@ -505,7 +505,7 @@ for tag, val in t2aru.items():
                 contactCopy = copy.deepcopy(contact)
                 for groupTag in groupTags:
                     #recupero il RN del client destinatario in base al tag di sync 
-                    groupRN_other= otheracc.tag_to_rn_ContactGroup(groupTag)
+                    groupRN_other= otheracc.tag_to_rn_contactGroup(groupTag)
                     #lo aggiungi al contatto
 
                     groupID_other=remove_prefix(groupRN_other,"contactGroups/")
