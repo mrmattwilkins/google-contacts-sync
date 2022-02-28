@@ -64,7 +64,7 @@ def load_config(cfile):
         otherwise just exit
 
     """
-    print(f"loaded {cfile}")
+    vprint(f"loaded {cfile}")
     # put in default config file if necessary
     if not cfile.exists():
         cp = configparser.ConfigParser()
@@ -149,7 +149,7 @@ cp = load_config(cfile)
 # get the contacts for each user
 vprint('Getting contacts')
 con = {
-    cp[s]['user']: Contacts(cp[s]['keyfile'], cp[s]['credfile'], cp[s]['user'])
+    cp[s]['user']: Contacts(cp[s]['keyfile'], cp[s]['credfile'], cp[s]['user'],args.verbose)
     for s in cp.sections()
 }
 
@@ -233,7 +233,7 @@ for email, acc in con.items():
 #
 
 
-print("sync ContactGroups")
+vprint("ContactGroups synchronization...")
 all_sync_tags_ContactGroups = set([])
 for email, acc in con.items():
     all_sync_tags_ContactGroups.update([
@@ -242,7 +242,7 @@ for email, acc in con.items():
 
 
 # deletions are detected by missing tags, store the tags to delete in here
-print('ContactGroups - Checking what to delete')
+vprint('ContactGroups - Checking what to delete')
 todel = set([])
 for email, acc in con.items():
     # tags in acc

@@ -82,7 +82,7 @@ all_update_person_fields = [
 
 class Contacts():
 
-    def __init__(self, keyfile, credfile,user):
+    def __init__(self, keyfile, credfile,user,verbose):
 
         creds = None
 
@@ -98,7 +98,9 @@ class Contacts():
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                print("login to:",user)
+                if verbose:
+                    print("login into:",user)
+
                 flow = InstalledAppFlow.from_client_secrets_file(
                     keyfile, SCOPES
                 )
@@ -412,7 +414,7 @@ class Contacts():
 
 
 
-    #label
+    #label - contactGroup
 
     def rn_to_tag_ContactGroup(self, rn):
         """Return the resourceName for this tag, or None"""
