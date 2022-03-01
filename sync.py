@@ -45,7 +45,7 @@ def duplicates(ls: list):
 
 
 def vprint(*a, **vargs):
-    if args.verbose:
+    #if args.verbose:
         print(*a, **vargs)
 
 
@@ -321,8 +321,8 @@ for tag, val in t2aru.items():
     # find the account with most recent update
     newest = max(val, key=lambda x: x[2])
     acc, rn = newest[:2]
-    vprint(f"{acc.infoGroup[rn]['name']}: ", end='')
-    contactGroup = acc.getContactGroup(rn)
+    vprint(f"{acc.info_group[rn]['name']}: ", end='')
+    contactGroup = acc.get_contactGroup(rn)
     for otheremail, otheracc in con.items():
         if otheracc == acc:
             continue
