@@ -2,6 +2,7 @@
 
 import pickle
 import os.path
+#from this import d
 import dateutil.parser
 
 from time import sleep
@@ -81,7 +82,7 @@ all_update_person_fields = [
 
 class Contacts():
 
-    def __init__(self, keyfile, credfile):
+    def __init__(self, keyfile, credfile,user,verbose):
 
         creds = None
 
@@ -97,6 +98,9 @@ class Contacts():
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
+                if verbose:
+                    print("login into:",user)
+
                 flow = InstalledAppFlow.from_client_secrets_file(
                     keyfile, SCOPES
                 )
@@ -248,6 +252,25 @@ class Contacts():
                 )
             }
 
+        self.info_group = {}
+        for p in self.get_contactGroups():
+            tagls = [
+                kv['value']
+                for kv in p.get('clientData', {})
+                if kv.get('key', None) == SYNC_TAG
+            ]
+            if p["groupType"]!="USER_CONTACT_GROUP":
+                continue
+
+            self.info_group[p['resourceName']] = {
+                'etag': p['etag'],
+                'tag': tagls[0] if tagls else None,
+                'updated': dateutil.parser.isoparse(
+                    p['metadata']['updateTime']
+                ),
+                'name': p['name']
+            }
+
     def get_all_contacts(
         self, fields=['names', 'organizations', 'clientData', 'metadata']
     ):
@@ -346,6 +369,7 @@ class Contacts():
             sleep(1)
             self.update_tag(rn, tag)
 
+
     def add(self, body):
         """Add a person with this body
 
@@ -355,7 +379,7 @@ class Contacts():
             Maps all_person_fields to lists of dicts with info in them.
 
         """
-
+        print(body)
         new_contact = self.service.people().createContact(
             body=body
         ).execute()
@@ -386,3 +410,142 @@ class Contacts():
             personFields=','.join(all_person_fields)
         ).execute()
         return self.__strip_body(p)
+
+
+
+
+    #label - contactGroup
+
+    def rn_to_tag_contactGroup(self, rn):
+        """Return the resourceName for this tag, or None"""
+
+        tag = [v['tag'] for rn_loc, v in self.info_group.items() if rn_loc == rn]
+        if not tag:
+            return None
+        assert(len(tag) == 1)
+        return tag[0]
+
+    def tag_to_rn_contactGroup(self, tag):
+        """Return the resourceName for this tag, or None"""
+        rn = [rn for rn, v in self.info_group.items() if v['tag'] == tag]
+        if not rn:
+            return None
+        assert(len(rn) == 1)
+        return rn[0]
+
+
+    def add_contactGroup(self,body):
+        """Add a person with this body
+
+        Parameters
+        ----------
+        body: dict
+           
+
+        """
+        body["readGroupFields"]="clientData,groupType,metadata,name"
+        new_contact = self.service.contactGroups().create(
+            body=body
+        ).execute()
+        return new_contact
+
+    def get_contactGroups(self):
+        #recupero la lista di ContactGroups
+        """Return a list of all the ContactGroup."""
+
+        # Keep getting 1000 connections until the nextPageToken becomes None
+        ContactGroup_list = []
+        next_page_token = ''
+        while True:
+            if not (next_page_token is None):
+                # Call the People API
+                results = self.service.contactGroups().list (
+                        pageSize=1000,
+                        pageToken=next_page_token,
+                        groupFields="clientData,name,metadata,groupType"
+                        ).execute()
+                ContactGroup_list += results.get('contactGroups', [])
+                next_page_token = results.get('nextPageToken')
+            else:
+                break
+        return ContactGroup_list
+
+    def get_contactGroup(self,rn):
+        """Return a person body, stripped of resourceName/etag etc"""
+
+        p = self.service.contactGroups().get(
+            resourceName=rn,
+            groupFields="clientData,groupType,metadata,name"
+        ).execute()
+        return p
+
+    def update_contactGroup_tag(self, rn: str, tag: str):
+        """Update the tag for a contact
+
+        Parameters
+        ---------
+        rn: str
+            The resource name of ContactGroup to add tag to
+
+        tag: str
+            The tag to add.  No check on uniques is made, but it better be
+
+        """
+        # get the current clientData
+        try:
+            p = self.service.contactGroups().get(
+                resourceName=rn,
+                groupFields='clientData'
+            ).execute()
+
+            # the clientData without the tag dict
+            wout = [
+                i
+                for i in p.get('clientData', [])
+                if i.get('key', None) != SYNC_TAG
+            ]
+            wout.append({'key': SYNC_TAG, 'value': tag})
+
+            self.service.contactGroups().update(
+                resourceName=rn,
+                body={ "contactGroup": {'etag': self.info_group[rn]['etag'], 'clientData': wout},"updateGroupFields": "clientData", "readGroupFields": "clientData,groupType,metadata,name"}
+            ).execute()
+        except HttpError as e:
+            # added a little sleep to avoid 429 HTTP error because rate limit
+            sleep(1)
+            self.update_contactGroup_tag(rn, tag)
+
+
+    def update_contactGroup(self, tag: str, body: dict):
+        rn = self.tag_to_rn_contactGroup(tag)
+
+        if rn is not None:
+            try:
+                
+                self.service.contactGroups().update(
+                    resourceName=rn,
+                    body={ "contactGroup": {'etag': self.info_group[rn]['etag'], 'name': body["name"]},"readGroupFields": "clientData,groupType,metadata,name"}
+                ).execute()
+
+            except HttpError as e:
+                # added a little sleep to avoid 429 HTTP error because rate limit
+                sleep(1)
+                self.update_contactGroup(tag, body)
+
+        pass
+
+
+    def delete_contactGroup(self,tag:str):
+       # need to find the resource name
+        rn = self.tag_to_rn_contactGroup(tag)
+        if rn is None:
+            return
+
+        print(f"{self.info_group[rn]['name']} ", end='')
+        self.service.contactGroups().delete(resourceName=rn,deleteContacts=False).execute()
+   
+
+
+
+    
+    
