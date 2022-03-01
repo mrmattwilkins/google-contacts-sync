@@ -2,7 +2,6 @@
 
 import pickle
 import os.path
-#from this import d
 import dateutil.parser
 
 from time import sleep
@@ -82,7 +81,7 @@ all_update_person_fields = [
 
 class Contacts():
 
-    def __init__(self, keyfile, credfile,user,verbose):
+    def __init__(self, keyfile, credfile, user, verbose):
 
         creds = None
 
@@ -99,7 +98,7 @@ class Contacts():
                 creds.refresh(Request())
             else:
                 if verbose:
-                    print("login into:",user)
+                    print("login into:", user)
 
                 flow = InstalledAppFlow.from_client_secrets_file(
                     keyfile, SCOPES
@@ -116,7 +115,7 @@ class Contacts():
         self.get_info()
 
     def __strip_body(self, body):
-        """Return a person body without coverPhotos/photos/metadata 
+        """Return a person body without coverPhotos/photos/metadata
         and some other things
 
         We need just this info about a person when we do an update or add, the
@@ -259,7 +258,7 @@ class Contacts():
                 for kv in p.get('clientData', {})
                 if kv.get('key', None) == SYNC_TAG
             ]
-            if p["groupType"]!="USER_CONTACT_GROUP":
+            if p["groupType"] != "USER_CONTACT_GROUP":
                 continue
 
             self.info_group[p['resourceName']] = {
@@ -364,11 +363,10 @@ class Contacts():
                 updatePersonFields='clientData',
                 body={'etag': self.info[rn]['etag'], 'clientData': wout}
             ).execute()
-        except HttpError as e:
-            # added a little sleep to avoid 429 HTTP error because rate limit
+        except HttpError:
+            # sleep to avoid 429 HTTP error because rate limit
             sleep(1)
             self.update_tag(rn, tag)
-
 
     def add(self, body):
         """Add a person with this body
@@ -379,7 +377,6 @@ class Contacts():
             Maps all_person_fields to lists of dicts with info in them.
 
         """
-        print(body)
         new_contact = self.service.people().createContact(
             body=body
         ).execute()
@@ -396,9 +393,8 @@ class Contacts():
                     updatePersonFields=','.join(all_update_person_fields),
                     body=body
                 ).execute()
-
-            except HttpError as e:
-                # added a little sleep to avoid 429 HTTP error because rate limit
+            except HttpError:
+                # sleep to avoid 429 HTTP error because rate limit
                 sleep(1)
                 self.update(tag, body, verbose)
 
@@ -411,15 +407,13 @@ class Contacts():
         ).execute()
         return self.__strip_body(p)
 
-
-
-
-    #label - contactGroup
-
     def rn_to_tag_contactGroup(self, rn):
         """Return the resourceName for this tag, or None"""
 
-        tag = [v['tag'] for rn_loc, v in self.info_group.items() if rn_loc == rn]
+        tag = [
+            v['tag']
+            for rn_loc, v in self.info_group.items() if rn_loc == rn
+        ]
         if not tag:
             return None
         assert(len(tag) == 1)
@@ -433,24 +427,22 @@ class Contacts():
         assert(len(rn) == 1)
         return rn[0]
 
-
-    def add_contactGroup(self,body):
+    def add_contactGroup(self, body):
         """Add a person with this body
 
         Parameters
         ----------
         body: dict
-           
+
 
         """
-        body["readGroupFields"]="clientData,groupType,metadata,name"
+        body["readGroupFields"] = "clientData,groupType,metadata,name"
         new_contact = self.service.contactGroups().create(
             body=body
         ).execute()
         return new_contact
 
     def get_contactGroups(self):
-        #recupero la lista di ContactGroups
         """Return a list of all the ContactGroup."""
 
         # Keep getting 1000 connections until the nextPageToken becomes None
@@ -459,18 +451,18 @@ class Contacts():
         while True:
             if not (next_page_token is None):
                 # Call the People API
-                results = self.service.contactGroups().list (
-                        pageSize=1000,
-                        pageToken=next_page_token,
-                        groupFields="clientData,name,metadata,groupType"
-                        ).execute()
+                results = self.service.contactGroups().list(
+                    pageSize=1000,
+                    pageToken=next_page_token,
+                    groupFields="clientData,name,metadata,groupType"
+                ).execute()
                 ContactGroup_list += results.get('contactGroups', [])
                 next_page_token = results.get('nextPageToken')
             else:
                 break
         return ContactGroup_list
 
-    def get_contactGroup(self,rn):
+    def get_contactGroup(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
 
         p = self.service.contactGroups().get(
@@ -508,44 +500,48 @@ class Contacts():
 
             self.service.contactGroups().update(
                 resourceName=rn,
-                body={ "contactGroup": {'etag': self.info_group[rn]['etag'], 'clientData': wout},"updateGroupFields": "clientData", "readGroupFields": "clientData,groupType,metadata,name"}
+                body={
+                    "contactGroup": {
+                        'etag': self.info_group[rn]['etag'],
+                        'clientData': wout
+                    },
+                    "updateGroupFields": "clientData",
+                    "readGroupFields": "clientData,groupType,metadata,name"
+                }
             ).execute()
-        except HttpError as e:
-            # added a little sleep to avoid 429 HTTP error because rate limit
+        except HttpError:
+            # sleep to avoid 429 HTTP error because rate limit
             sleep(1)
             self.update_contactGroup_tag(rn, tag)
-
 
     def update_contactGroup(self, tag: str, body: dict):
         rn = self.tag_to_rn_contactGroup(tag)
 
         if rn is not None:
             try:
-                
                 self.service.contactGroups().update(
                     resourceName=rn,
-                    body={ "contactGroup": {'etag': self.info_group[rn]['etag'], 'name': body["name"]},"readGroupFields": "clientData,groupType,metadata,name"}
+                    body={
+                        "contactGroup": {
+                            'etag': self.info_group[rn]['etag'],
+                            'name': body["name"]
+                        },
+                        "readGroupFields": "clientData,groupType,metadata,name"
+                    }
                 ).execute()
 
-            except HttpError as e:
-                # added a little sleep to avoid 429 HTTP error because rate limit
+            except HttpError:
+                # sleep to avoid 429 HTTP error because rate limit
                 sleep(1)
                 self.update_contactGroup(tag, body)
 
-        pass
-
-
-    def delete_contactGroup(self,tag:str):
-       # need to find the resource name
+    def delete_contactGroup(self, tag: str):
+        # need to find the resource name
         rn = self.tag_to_rn_contactGroup(tag)
         if rn is None:
             return
 
-        print(f"{self.info_group[rn]['name']} ", end='')
-        self.service.contactGroups().delete(resourceName=rn,deleteContacts=False).execute()
-   
-
-
-
-    
-    
+        # print(f"{self.info_group[rn]['name']} ", end='')
+        self.service.contactGroups().delete(
+            resourceName=rn, deleteContacts=False
+        ).execute()
