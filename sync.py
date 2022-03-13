@@ -479,7 +479,7 @@ for tag, val in t2aru.items():
     ]
     # get syncTag for each RN
     groupTags = [
-        acc.rn_to_tag_ContactGroup(groupRN) for groupRN in groupRNs
+        acc.rn_to_tag_contactGroup(groupRN) for groupRN in groupRNs
     ]
 
     # remove all contactGroup ( label ) ( except myContacts)
@@ -496,16 +496,17 @@ for tag, val in t2aru.items():
 
         if len(groupTags) > 0:
             contactCopy = copy.deepcopy(contact)
-            for groupTag in groupTags:
+            for tag in groupTags:
                 # retrieving the RN of the other client based on the sync tag
-                groupRN_other = otheracc.tag_to_rn_contactGroup(groupTag)
-                # add it to contact
-
-                groupID_other = remove_prefix(groupRN_other, "contactGroups/")
+                rn = otheracc.tag_to_rn_contactGroup(tag)
+                # might be None if tag was starred or other system group
+                if not rn:
+                    continue
+                gid = remove_prefix(rn, "contactGroups/")
                 contactCopy["memberships"].append({
                     'contactGroupMembership': {
-                        'contactGroupId': groupID_other,
-                        'contactGroupResourceName': groupRN_other
+                        'contactGroupId': gid,
+                        'contactGroupResourceName': rn
                     }
                 })
 
