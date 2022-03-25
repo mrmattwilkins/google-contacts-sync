@@ -393,8 +393,10 @@ class Contacts():
                     updatePersonFields=','.join(all_update_person_fields),
                     body=body
                 ).execute()
-            except HttpError:
+            except HttpError as e:
                 # sleep to avoid 429 HTTP error because rate limit
+                if verbose:
+                    print("[ERROR] ",e)
                 sleep(1)
                 self.update(tag, body, verbose)
 
