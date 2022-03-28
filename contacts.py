@@ -201,7 +201,7 @@ class Contacts():
         if 'genders' in ret:
             ret['genders'] = [ret['genders'][0]]
         if "birthdays" in ret:
-            ret["birthdays"]=[ret["birthdays"][0]]
+            ret["birthdays"] = [ret["birthdays"][0]]
 
         return ret
 
@@ -398,7 +398,7 @@ class Contacts():
             except HttpError as e:
                 # sleep to avoid 429 HTTP error because rate limit
                 if verbose:
-                    print("[ERROR] ",e)
+                    print("[ERROR] ", e)
                 sleep(1)
                 self.update(tag, body, verbose)
 

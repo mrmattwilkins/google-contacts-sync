@@ -96,8 +96,12 @@ def load_config(cfile):
 def save_config(cp, cfile):
     """Update the last run, and save"""
     cp['DEFAULT'] = {
-        #+1 second because it happens that the server time of the last updated element is greater than the one saved on the config.ini ( do not ask me why )
-        'last': (datetime.datetime.utcnow() + datetime.timedelta(seconds=1)).replace(tzinfo=pytz.utc).isoformat()
+        # +1s because it happens that the server time of the last updated
+        # element is greater than the one saved on the config.ini (do not ask
+        # me why )
+        'last': (
+            datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+        ).replace(tzinfo=pytz.utc).isoformat()
     }
     with open(cfile, 'w') as cfh:
         cp.write(cfh)
@@ -472,15 +476,12 @@ for tag, val in t2aru.items():
     vprint(f"{acc.info[rn]['name']}: ", end='')
     contact = acc.get(rn)
 
-
-
-
     # before sending the update
-    # I take all the RNs of the labels  ( except myContacts)
+    # I take all the RNs of the labels  (except myContacts)
     # get the label sync tag
     # for each tag, get the RN in the other account
 
-    # get RN of the contactGroup - labels ( except myContacts)
+    # get RN of the contactGroup - labels (except myContacts)
     groupRNs = [
         grp["contactGroupMembership"]["contactGroupResourceName"]
         for grp in contact["memberships"]
