@@ -12,7 +12,7 @@ import datetime
 import dateutil
 import pytz
 import copy
-
+from os.path import exists
 from contacts import Contacts
 
 
@@ -96,8 +96,8 @@ def load_config(cfile):
 def save_config(cp, cfile):
     """Update the last run, and save"""
     cp['DEFAULT'] = {
-        'last': datetime.datetime.utcnow().replace(tzinfo=pytz.utc).isoformat()
-
+        #+1 second because it happens that the server time of the last updated element is greater than the one saved on the config.ini ( do not ask me why )
+        'last': (datetime.datetime.utcnow() + datetime.timedelta(seconds=1)).replace(tzinfo=pytz.utc).isoformat()
     }
     with open(cfile, 'w') as cfh:
         cp.write(cfh)
@@ -140,9 +140,15 @@ args = p.parse_args()
 
 # get the configuration file
 vprint('Loading configuration')
-cdir = pathlib.Path(
-    appdirs.AppDirs('google-contacts-sync', 'mcw').user_data_dir
-)
+if exists("PORTABLE.md"):
+    cdir = pathlib.Path(
+        "conf"
+    )
+else:
+    cdir = pathlib.Path(
+        appdirs.AppDirs('google-contacts-sync', 'mcw').user_data_dir
+    )
+
 os.makedirs(cdir, mode=0o755, exist_ok=True)
 cfile = cdir / 'config.ini'
 cp = load_config(cfile)
@@ -465,6 +471,9 @@ for tag, val in t2aru.items():
     acc, rn = newest[:2]
     vprint(f"{acc.info[rn]['name']}: ", end='')
     contact = acc.get(rn)
+
+
+
 
     # before sending the update
     # I take all the RNs of the labels  ( except myContacts)

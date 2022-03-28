@@ -196,10 +196,12 @@ class Contacts():
                 i.pop('metadata', None)
 
         # for some reason some of my contacts have more than one name.  remove
-        # anything except the first.  same problem with genders.
+        # anything except the first.  same problem with genders and birthdays
         ret['names'] = [ret['names'][0]]
         if 'genders' in ret:
             ret['genders'] = [ret['genders'][0]]
+        if "birthdays" in ret:
+            ret["birthdays"]=[ret["birthdays"][0]]
 
         return ret
 
@@ -393,8 +395,10 @@ class Contacts():
                     updatePersonFields=','.join(all_update_person_fields),
                     body=body
                 ).execute()
-            except HttpError:
+            except HttpError as e:
                 # sleep to avoid 429 HTTP error because rate limit
+                if verbose:
+                    print("[ERROR] ",e)
                 sleep(1)
                 self.update(tag, body, verbose)
 
