@@ -473,11 +473,7 @@ for tag, val in t2aru.items():
     contact = acc.get(rn)
 
 
-    #fix birthday
-    #I found myself with some contacts with 2 birthdays (from the web browser it results only 1)
-    # this (temporarily?) fixes the problem.
-    if "birthdays" in contact and len(contact["birthdays"])>1:
-        contact["birthdays"]=[contact["birthdays"][0]]
+
 
     # before sending the update
     # I take all the RNs of the labels  ( except myContacts)

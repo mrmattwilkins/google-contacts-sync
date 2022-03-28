@@ -196,10 +196,12 @@ class Contacts():
                 i.pop('metadata', None)
 
         # for some reason some of my contacts have more than one name.  remove
-        # anything except the first.  same problem with genders.
+        # anything except the first.  same problem with genders and birthdays
         ret['names'] = [ret['names'][0]]
         if 'genders' in ret:
             ret['genders'] = [ret['genders'][0]]
+        if "birthdays" in ret:
+            ret["birthdays"]=[ret["birthdays"][0]]
 
         return ret
 

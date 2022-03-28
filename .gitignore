@@ -1,4 +1,5 @@
 *.ipynb
 *creds
 __pycache__
-conf/
+conf
+.vscode
