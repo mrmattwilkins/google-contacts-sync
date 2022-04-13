@@ -14,7 +14,7 @@ import pytz
 import copy
 from os.path import exists
 from contacts import Contacts
-
+import pickle
 
 all_sync_tags = set([])
 
@@ -71,7 +71,8 @@ def load_config(cfile):
 
         cp['DEFAULT'] = {
             'msg': 'You need an account section for each user, please setup',
-            'last': '1972-01-01:T00:00:00+00.00'
+            'last': '1972-01-01:T00:00:00+00.00',
+            'backupdays':0
         }
         cp['account-FIXME'] = {
             'user': 'FIXME@gmail.com',
@@ -101,7 +102,8 @@ def save_config(cp, cfile):
         # me why )
         'last': (
             datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
-        ).replace(tzinfo=pytz.utc).isoformat()
+        ).replace(tzinfo=pytz.utc).isoformat(),
+        'backupdays': cp['DEFAULT']['backupdays']
     }
     with open(cfile, 'w') as cfh:
         cp.write(cfh)
@@ -165,6 +167,25 @@ con = {
     )
     for s in cp.sections()
 }
+
+#backup
+if int(cp['DEFAULT']['backupdays'])>0:
+    os.makedirs(cdir / 'backups', mode=0o755, exist_ok=True)
+
+    #remove last backup 
+    lastBackupFile=cdir / 'backups' / (cp['DEFAULT']['backupdays']+".bak" )
+    if os.path.exists(lastBackupFile):
+        os.remove(lastBackupFile)
+
+    #shift backups
+    for i in reversed(range(1,int(cp['DEFAULT']['backupdays']))):
+        if os.path.exists(cdir / 'backups' / (str(i)+".bak" )):
+            os.rename(cdir / 'backups' / (str(i)+".bak" ), cdir / 'backups' / (str(i+1)+".bak" ))
+
+    #dump all data
+    with open(cdir / 'backups' / '1.bak', 'wb') as config_dictionary_file:
+        pickle.dump(con, config_dictionary_file)
+
 
 if args.init:
     print("Setting up syncing using names to identify identical contacts")
