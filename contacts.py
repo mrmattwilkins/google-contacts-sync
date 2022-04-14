@@ -440,11 +440,18 @@ class Contacts():
 
 
         """
-        body["readGroupFields"] = "clientData,groupType,metadata,name"
-        new_contact = self.service.contactGroups().create(
-            body=body
-        ).execute()
-        return new_contact
+
+        try:
+            body["readGroupFields"] = "clientData,groupType,metadata,name"
+            new_contact = self.service.contactGroups().create(
+                body=body
+            ).execute()
+            return new_contact
+        except HttpError as e:
+            print("[ERROR] ", e)
+            sleep(200)
+            return self.add_contactGroup(body)
+
 
     def get_contactGroups(self):
         """Return a list of all the ContactGroup."""
