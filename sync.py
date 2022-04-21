@@ -16,7 +16,23 @@ from os.path import exists
 from contacts import Contacts
 import pickle
 
+
 all_sync_tags = set([])
+logName = "log.txt"
+
+#redefine print for force flush and save log to file (if args.file is defined)
+oldPrint=print
+def _print(*a,**vargs):
+    vargs["flush"]=True
+    oldPrint(*a,**vargs)
+    if args.file:   
+#highly inefficient, but even if it crashes, I can save the last instruction
+        with open(logName,"a") as f:           
+            vargs["file"]=f
+            oldPrint(*a,**vargs)
+print=_print
+
+
 
 
 def new_tag():
@@ -42,6 +58,8 @@ def duplicates(ls: list):
             seen.add(x)
 
     return dups
+
+
 
 
 def vprint(*a, **vargs):
@@ -97,11 +115,11 @@ def load_config(cfile):
 def save_config(cp, cfile):
     """Update the last run, and save"""
     cp['DEFAULT'] = {
-        # +1s because it happens that the server time of the last updated
+        # +5s because it happens that the server time of the last updated
         # element is greater than the one saved on the config.ini (do not ask
         # me why )
         'last': (
-            datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
+            datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
         ).replace(tzinfo=pytz.utc).isoformat(),
         'backupdays': cp['DEFAULT']['backupdays']
     }
@@ -141,6 +159,10 @@ p.add_argument(
 p.add_argument(
     '-v', '--verbose', action='store_true',
     help="Verbose output"
+)
+p.add_argument(
+    '-f', '--file', action='store_true',
+    help="Save output to file"
 )
 args = p.parse_args()
 
