@@ -29,6 +29,7 @@ def _print(*a,**vargs):
 #highly inefficient, but even if it crashes, I can save the last instruction
         with open(logName,"a") as f:           
             vargs["file"]=f
+            a  = ("["+str(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))+"]",)+a
             oldPrint(*a,**vargs)
 print=_print
 
