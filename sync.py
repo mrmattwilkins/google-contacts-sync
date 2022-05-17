@@ -459,7 +459,7 @@ for email, acc in con.items():
         groupRNs = [
             grp["contactGroupMembership"]["contactGroupResourceName"]
             for grp in newcontact["memberships"]
-            if grp["contactGroupMembership"]["contactGroupId"] != "myContacts"
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] != "contactGroups/myContacts"
         ]
         # get syncTag for each RN
         groupTags = [
@@ -470,7 +470,7 @@ for email, acc in con.items():
         newcontact["memberships"] = [
             grp
             for grp in newcontact["memberships"]
-            if grp["contactGroupMembership"]["contactGroupId"] == "myContacts"
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] == "contactGroups/myContacts"
         ]
 
         p = None
@@ -540,7 +540,7 @@ for tag, val in t2aru.items():
     groupRNs = [
         grp["contactGroupMembership"]["contactGroupResourceName"]
         for grp in contact["memberships"]
-        if grp["contactGroupMembership"]["contactGroupId"] != "myContacts"
+        if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] != "contactGroups/myContacts"
     ]
     # get syncTag for each RN
     groupTags = [
@@ -551,7 +551,7 @@ for tag, val in t2aru.items():
     contact["memberships"] = [
         grp
         for grp in contact["memberships"]
-        if grp["contactGroupMembership"]["contactGroupId"] == "myContacts"
+        if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] == "contactGroups/myContacts"
     ]
 
     for otheremail, otheracc in con.items():
@@ -561,9 +561,9 @@ for tag, val in t2aru.items():
 
         if len(groupTags) > 0:
             contactCopy = copy.deepcopy(contact)
-            for tag in groupTags:
+            for groupTag in groupTags:
                 # retrieving the RN of the other client based on the sync tag
-                rn = otheracc.tag_to_rn_contactGroup(tag)
+                rn = otheracc.tag_to_rn_contactGroup(groupTag)
                 # might be None if tag was starred or other system group
                 if not rn:
                     continue
@@ -648,7 +648,7 @@ if len(new_con)!=0:
         groupRNs = [
             grp["contactGroupMembership"]["contactGroupResourceName"]
             for grp in newcontact["memberships"]
-            if grp["contactGroupMembership"]["contactGroupId"] != "myContacts"
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] != "contactGroups/myContacts"
         ]
         # get syncTag for each RN
         groupTags = [
@@ -659,7 +659,7 @@ if len(new_con)!=0:
         newcontact["memberships"] = [
             grp
             for grp in newcontact["memberships"]
-            if grp["contactGroupMembership"]["contactGroupId"] == "myContacts"
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] == "contactGroups/myContacts"
         ]
 
         p = None
