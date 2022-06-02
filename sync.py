@@ -8,6 +8,7 @@ import configparser
 import argparse
 import random
 import string
+import time
 import datetime
 import dateutil
 import pytz
@@ -137,6 +138,10 @@ p.add_argument(
     help="Initialize by syncing using names"
 )
 p.add_argument(
+    '--rlim', type=int,
+    help="If --init, wait this many seconds between each sync"
+)
+p.add_argument(
     '-v', '--verbose', action='store_true',
     help="Verbose output"
 )
@@ -207,6 +212,9 @@ if args.init:
                         otheracc.add(newcontact)
                 done.add(p['name'])
                 nsync += 1
+                # back-off a bit so google doesn't rate limit us
+                if args.rlim and args.rlim > 0:
+                    time.sleep(args.rlim)
 
             print(
                 f"Pushing {email} (tot {len(acc.info)}): "
