@@ -297,7 +297,7 @@ class Contacts():
 
     def tag_to_rn(self, tag):
         """Return the resourceName for this tag, or None"""
-        rn = [rn for rn, v in self.info.items() if v['tag'] == tag]
+        rn = [rn for rn, v in self.info.items() if v['tag'] == tag]         #TODO: once did not find the tag - the next day he found it!!!! WTF?!
         if not rn:
             return None
         assert(len(rn) == 1)

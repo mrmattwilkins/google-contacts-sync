@@ -286,6 +286,7 @@ if len(checked_email)==0:
 
 con=checked_email
 
+
 # ======================================
 # Sync ContactGroup
 # ======================================
@@ -343,6 +344,7 @@ for email, acc in con.items():
         acc.update_contactGroup_tag(rn, tag)
         newcontact = acc.get_contactGroup(rn)
 
+        print(newcontact)
         # record this is a new ContactGroup so we won't try syncing them laster
         added.append((acc, rn))
 
@@ -397,6 +399,17 @@ for tag, val in t2aru.items():
 vprint("Contacts synchronization...")
 # we need a full set of tags so we can detect changes.  ignore those that don't
 # have a tag yet, they will be additions
+
+#TODO: remove this code - for test purpose -> print all data from all accounts
+#for email, acc in con.items():
+#    vprint(email)
+#    for key, data in acc.info.items():
+#        name=data["name"]
+#        tag=data["tag"]
+#        etag=data["etag"]
+#        vprint(name," - ",tag," - ",etag," - ",key)
+
+
 for email, acc in con.items():
     all_sync_tags.update([
         v['tag'] for v in acc.info.values() if v['tag'] is not None
