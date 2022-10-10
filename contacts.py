@@ -10,6 +10,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+import google.auth.exceptions
+
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/contacts']
@@ -94,9 +96,15 @@ class Contacts():
 
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
+            managedToRefresh=False
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())
+                    managedToRefresh=True
+                except google.auth.exceptions.RefreshError:
+                    print("can't refresh token; relogin")
+
+            if not managedToRefresh:
                 if verbose:
                     print("login into:", user)
 
