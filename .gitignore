@@ -5,3 +5,4 @@ conf
 .vscode
 *.bat
 *.txt
+venv/
