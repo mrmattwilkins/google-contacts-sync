@@ -15,9 +15,26 @@ import pytz
 import copy
 from os.path import exists
 from contacts import Contacts
+import pickle
 
 
 all_sync_tags = set([])
+logName = "log.txt"
+
+#redefine print for force flush and save log to file (if args.file is defined)
+oldPrint=print
+def _print(*a,**vargs):
+    vargs["flush"]=True
+    oldPrint(*a,**vargs)
+    if args.file:   
+#highly inefficient, but even if it crashes, I can save the last instruction
+        with open(logName,"a") as f:           
+            vargs["file"]=f
+            a  = ("["+str(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))+"]",)+a
+            oldPrint(*a,**vargs)
+print=_print
+
+
 
 
 def new_tag():
@@ -43,6 +60,8 @@ def duplicates(ls: list):
             seen.add(x)
 
     return dups
+
+
 
 
 def vprint(*a, **vargs):
@@ -72,7 +91,8 @@ def load_config(cfile):
 
         cp['DEFAULT'] = {
             'msg': 'You need an account section for each user, please setup',
-            'last': '1972-01-01:T00:00:00+00.00'
+            'last': '1972-01-01:T00:00:00+00.00',
+            'backupdays':0
         }
         cp['account-FIXME'] = {
             'user': 'FIXME@gmail.com',
@@ -97,12 +117,13 @@ def load_config(cfile):
 def save_config(cp, cfile):
     """Update the last run, and save"""
     cp['DEFAULT'] = {
-        # +1s because it happens that the server time of the last updated
+        # +5s because it happens that the server time of the last updated
         # element is greater than the one saved on the config.ini (do not ask
         # me why )
         'last': (
-            datetime.datetime.utcnow() + datetime.timedelta(seconds=1)
-        ).replace(tzinfo=pytz.utc).isoformat()
+            datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
+        ).replace(tzinfo=pytz.utc).isoformat(),
+        'backupdays': cp['DEFAULT']['backupdays']
     }
     with open(cfile, 'w') as cfh:
         cp.write(cfh)
@@ -145,6 +166,10 @@ p.add_argument(
     '-v', '--verbose', action='store_true',
     help="Verbose output"
 )
+p.add_argument(
+    '-f', '--file', action='store_true',
+    help="Save output to file"
+)
 args = p.parse_args()
 
 # get the configuration file
@@ -170,6 +195,25 @@ con = {
     )
     for s in cp.sections()
 }
+
+#backup
+if int(cp['DEFAULT']['backupdays'])>0:
+    os.makedirs(cdir / 'backups', mode=0o755, exist_ok=True)
+
+    #remove last backup 
+    lastBackupFile=cdir / 'backups' / (cp['DEFAULT']['backupdays']+".bak" )
+    if os.path.exists(lastBackupFile):
+        os.remove(lastBackupFile)
+
+    #shift backups
+    for i in reversed(range(1,int(cp['DEFAULT']['backupdays']))):
+        if os.path.exists(cdir / 'backups' / (str(i)+".bak" )):
+            os.rename(cdir / 'backups' / (str(i)+".bak" ), cdir / 'backups' / (str(i+1)+".bak" ))
+
+    #dump all data
+    with open(cdir / 'backups' / '1.bak', 'wb') as config_dictionary_file:
+        pickle.dump(con, config_dictionary_file)
+
 
 if args.init:
     print("Setting up syncing using names to identify identical contacts")
@@ -230,14 +274,26 @@ if args.init:
 
 # if an account has no sync tags, the user needs to do a --init
 vprint('Checking no new accounts')
+checked_email={}
+new_con={}
+
 for email, acc in con.items():
     if all([v['tag'] is None for v in acc.info.values()]):
-        print(
-            f'{email} has no sync tags.  It looks like this is the first time '
-            'running this script for this account.  You need to pass --init '
-            'for me to assign the sync tag to each contact'
-        )
-        sys.exit(2)
+        new_con[email]=acc
+    else:
+        checked_email[email]=acc
+        
+
+if len(checked_email)==0:
+    print(
+    f'all emails have no sync tags.  It looks like this is the first time '
+    'running this script for this account.  You need to pass --init '
+    'for me to assign the sync tag to each contact'
+    )
+    sys.exit(2)
+
+con=checked_email
+
 
 # ======================================
 # Sync ContactGroup
@@ -296,6 +352,7 @@ for email, acc in con.items():
         acc.update_contactGroup_tag(rn, tag)
         newcontact = acc.get_contactGroup(rn)
 
+        print(newcontact)
         # record this is a new ContactGroup so we won't try syncing them laster
         added.append((acc, rn))
 
@@ -350,6 +407,17 @@ for tag, val in t2aru.items():
 vprint("Contacts synchronization...")
 # we need a full set of tags so we can detect changes.  ignore those that don't
 # have a tag yet, they will be additions
+
+#TODO: remove this code - for test purpose -> print all data from all accounts
+#for email, acc in con.items():
+#    vprint(email)
+#    for key, data in acc.info.items():
+#        name=data["name"]
+#        tag=data["tag"]
+#        etag=data["etag"]
+#        vprint(name," - ",tag," - ",etag," - ",key)
+
+
 for email, acc in con.items():
     all_sync_tags.update([
         v['tag'] for v in acc.info.values() if v['tag'] is not None
@@ -412,7 +480,7 @@ for email, acc in con.items():
         groupRNs = [
             grp["contactGroupMembership"]["contactGroupResourceName"]
             for grp in newcontact["memberships"]
-            if grp["contactGroupMembership"]["contactGroupId"] != "myContacts"
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] != "contactGroups/myContacts"
         ]
         # get syncTag for each RN
         groupTags = [
@@ -423,7 +491,7 @@ for email, acc in con.items():
         newcontact["memberships"] = [
             grp
             for grp in newcontact["memberships"]
-            if grp["contactGroupMembership"]["contactGroupId"] == "myContacts"
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] == "contactGroups/myContacts"
         ]
 
         p = None
@@ -493,7 +561,7 @@ for tag, val in t2aru.items():
     groupRNs = [
         grp["contactGroupMembership"]["contactGroupResourceName"]
         for grp in contact["memberships"]
-        if grp["contactGroupMembership"]["contactGroupId"] != "myContacts"
+        if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] != "contactGroups/myContacts"
     ]
     # get syncTag for each RN
     groupTags = [
@@ -504,7 +572,7 @@ for tag, val in t2aru.items():
     contact["memberships"] = [
         grp
         for grp in contact["memberships"]
-        if grp["contactGroupMembership"]["contactGroupId"] == "myContacts"
+        if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] == "contactGroups/myContacts"
     ]
 
     for otheremail, otheracc in con.items():
@@ -514,9 +582,9 @@ for tag, val in t2aru.items():
 
         if len(groupTags) > 0:
             contactCopy = copy.deepcopy(contact)
-            for tag in groupTags:
+            for groupTag in groupTags:
                 # retrieving the RN of the other client based on the sync tag
-                rn = otheracc.tag_to_rn_contactGroup(tag)
+                rn = otheracc.tag_to_rn_contactGroup(groupTag)
                 # might be None if tag was starred or other system group
                 if not rn:
                     continue
@@ -532,6 +600,117 @@ for tag, val in t2aru.items():
         else:
             otheracc.update(tag, contact, verbose=args.verbose)
     vprint('')
+
+
+
+
+
+if len(new_con)!=0:
+    vprint('There are new accounts!')
+    #there are new mail registered
+    #get_info of all  the first "con" ( one is equal to another )
+    #use the info of this "con" as source and create:
+    #the contactGroup
+    #the contacts
+    
+    source = con[next(iter(con))]
+    source.get_info()
+
+    
+    # ======================================
+    # Sync ContactGroup
+    # ======================================
+    toadd = [
+        (rn, v['name'])
+        for rn, v in source.info_group.items()
+    ]
+    if toadd:
+        vprint(f'contactsGroup to add: {list(i[1] for i in toadd)}')
+    for rn, name in toadd:
+        newcontact = source.get_contactGroup(rn)
+
+        # now add them to all the other accounts
+        for otheremail, other in new_con.items():
+            vprint(f'adding {name} to {otheremail}')
+            tmp = {
+                "contactGroup": {
+                    "name": newcontact["name"],
+                    "clientData": newcontact["clientData"]
+                }
+            }
+            p = other.add_contactGroup(tmp)
+
+
+    #get the ContactGroup just inserted
+    for newMail, newacc in new_con.items():
+        newacc.get_info()
+    # ======================================
+    # Sync Contact
+    # ======================================
+
+    toadd = [
+        (rn, v['name'])
+        for rn, v in source.info.items()
+    ]
+    if toadd:
+        vprint(f'{email}: contacts to add: {list(i[1] for i in toadd)}')
+    for rn, name in toadd:
+        newcontact = source.get(rn)
+        # ADD PERSON WITH LABEL ( ContactGroup )
+        #
+        # Before adding a new person, check which ContactGroup he is in
+        # if it is only in the standard one (myContacts - it has no label)
+        #   I continue as old code
+        # if it is 1 or more -> get the label sync tag
+        #   I look for the tag in the list of labels of the other account (I
+        #   retrieve the ResourceName)
+        # set the correct resource name
+        # get RN of the contactGroup - labels ( except myContacts)
+        groupRNs = [
+            grp["contactGroupMembership"]["contactGroupResourceName"]
+            for grp in newcontact["memberships"]
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] != "contactGroups/myContacts"
+        ]
+        # get syncTag for each RN
+        groupTags = [
+            source.rn_to_tag_contactGroup(groupRN) for groupRN in groupRNs
+        ]
+
+        # remove all contactGroup ( label ) ( except myContacts)
+        newcontact["memberships"] = [
+            grp
+            for grp in newcontact["memberships"]
+            if "contactGroupMembership" in grp and grp["contactGroupMembership"]["contactGroupResourceName"] == "contactGroups/myContacts"
+        ]
+
+        p = None
+
+        # now add them to all the other accounts
+        for otheremail, other in new_con.items():
+            vprint(f'adding {name} to {otheremail}')
+            # if there are tags to sync
+            if len(groupTags) > 0:
+                newcontactCopy = copy.deepcopy(newcontact)
+                for groupTag in groupTags:
+                    # retrieving the RN of other client based on the sync tag
+                    groupRN_other = other.tag_to_rn_contactGroup(groupTag)
+                    # add it to contact
+
+                    groupID_other = remove_prefix(
+                        groupRN_other, "contactGroups/"
+                    )
+                    newcontactCopy["memberships"].append({
+                        'contactGroupMembership': {
+                            'contactGroupId': groupID_other,
+                            'contactGroupResourceName': groupRN_other
+                        }
+                    })
+
+                p = other.add(newcontactCopy)
+            else:   # if there aren't any, I just add
+                p = other.add(newcontact)
+
+
 
 # update the last updated field
 save_config(cp, cfile)

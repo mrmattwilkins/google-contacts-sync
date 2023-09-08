@@ -3,3 +3,6 @@
 __pycache__
 conf
 .vscode
+*.bat
+*.txt
+venv/

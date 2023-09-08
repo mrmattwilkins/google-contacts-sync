@@ -10,6 +10,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+import google.auth.exceptions
+
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/contacts']
@@ -94,9 +96,15 @@ class Contacts():
 
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
+            managedToRefresh=False
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())
+                    managedToRefresh=True
+                except google.auth.exceptions.RefreshError:
+                    print("can't refresh token; relogin")
+
+            if not managedToRefresh:
                 if verbose:
                     print("login into:", user)
 
@@ -297,7 +305,7 @@ class Contacts():
 
     def tag_to_rn(self, tag):
         """Return the resourceName for this tag, or None"""
-        rn = [rn for rn, v in self.info.items() if v['tag'] == tag]
+        rn = [rn for rn, v in self.info.items() if v['tag'] == tag]         #TODO: once did not find the tag - the next day he found it!!!! WTF?!
         if not rn:
             return None
         assert(len(rn) == 1)
@@ -331,7 +339,17 @@ class Contacts():
 
         if verbose:
             print(f"{self.info[rn]['name']} ", end='')
-        self.service.people().deleteContact(resourceName=rn).execute()
+
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            try:
+                self.service.people().deleteContact(resourceName=rn).execute()
+                return
+            except HttpError:
+                # sleep to avoid 429 HTTP error because rate limit with tts
+                sleep(tts)
+                tts*=2
+
 
     def update_tag(self, rn: str, tag: str):
         """Update the tag for a contact
@@ -345,30 +363,34 @@ class Contacts():
             The tag to add.  No check on uniques is made, but it better be
 
         """
-        # get the current clientData
-        try:
-            p = self.service.people().get(
-                resourceName=rn,
-                personFields='clientData'
-            ).execute()
 
-            # the clientData without the tag dict
-            wout = [
-                i
-                for i in p.get('clientData', [])
-                if i.get('key', None) != SYNC_TAG
-            ]
-            wout.append({'key': SYNC_TAG, 'value': tag})
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            # get the current clientData
+            try:
+                p = self.service.people().get(
+                    resourceName=rn,
+                    personFields='clientData'
+                ).execute()
 
-            self.service.people().updateContact(
-                resourceName=rn,
-                updatePersonFields='clientData',
-                body={'etag': self.info[rn]['etag'], 'clientData': wout}
-            ).execute()
-        except HttpError:
-            # sleep to avoid 429 HTTP error because rate limit
-            sleep(1)
-            self.update_tag(rn, tag)
+                # the clientData without the tag dict
+                wout = [
+                    i
+                    for i in p.get('clientData', [])
+                    if i.get('key', None) != SYNC_TAG
+                ]
+                wout.append({'key': SYNC_TAG, 'value': tag})
+
+                self.service.people().updateContact(
+                    resourceName=rn,
+                    updatePersonFields='clientData',
+                    body={'etag': self.info[rn]['etag'], 'clientData': wout}
+                ).execute()
+                return
+            except HttpError:
+                # sleep to avoid 429 HTTP error because rate limit with tts
+                sleep(tts)
+                tts*=2
 
     def add(self, body):
         """Add a person with this body
@@ -379,37 +401,54 @@ class Contacts():
             Maps all_person_fields to lists of dicts with info in them.
 
         """
-        new_contact = self.service.people().createContact(
-            body=body
-        ).execute()
-        return new_contact
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            # get the current clientData
+            try:
+                new_contact = self.service.people().createContact(
+                    body=body
+                ).execute()
+                return new_contact
+            except HttpError:
+                # sleep to avoid 429 HTTP error because rate limit with tts
+                sleep(tts)
+                tts*=2
 
     def update(self, tag: str, body: dict, verbose=False):
         rn = self.tag_to_rn(tag)
 
         if rn is not None:
-            try:
-                body.update({'etag': self.info[rn]['etag']})
-                self.service.people().updateContact(
-                    resourceName=rn,
-                    updatePersonFields=','.join(all_update_person_fields),
-                    body=body
-                ).execute()
-            except HttpError as e:
-                # sleep to avoid 429 HTTP error because rate limit
-                if verbose:
-                    print("[ERROR] ", e)
-                sleep(1)
-                self.update(tag, body, verbose)
+            tts=0.5 #500 ms start -> exponential backoff
+            while True:
+                try:
+                    body.update({'etag': self.info[rn]['etag']})
+                    self.service.people().updateContact(
+                        resourceName=rn,
+                        updatePersonFields=','.join(all_update_person_fields),
+                        body=body
+                    ).execute()
+                    return
+                except HttpError as e:
+                    # sleep to avoid 429 HTTP error because rate limit with tts
+                    if verbose:
+                        print("\n","[ERROR] ", e)
+                    sleep(tts)
+                    tts*=2
 
     def get(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
-
-        p = self.service.people().get(
-            resourceName=rn,
-            personFields=','.join(all_person_fields)
-        ).execute()
-        return self.__strip_body(p)
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            try:
+                p = self.service.people().get(
+                    resourceName=rn,
+                    personFields=','.join(all_person_fields)
+                ).execute()
+                return self.__strip_body(p)
+            except HttpError as e:
+                print("\n","[ERROR] ", e)
+                sleep(tts)
+                tts*=2
 
     def rn_to_tag_contactGroup(self, rn):
         """Return the resourceName for this tag, or None"""
@@ -440,11 +479,20 @@ class Contacts():
 
 
         """
-        body["readGroupFields"] = "clientData,groupType,metadata,name"
-        new_contact = self.service.contactGroups().create(
-            body=body
-        ).execute()
-        return new_contact
+
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            try:
+                body["readGroupFields"] = "clientData,groupType,metadata,name"
+                new_contact = self.service.contactGroups().create(
+                    body=body
+                ).execute()
+                return new_contact
+            except HttpError as e:
+                print("\n","[ERROR] ", e)
+                sleep(tts)
+                tts*=2
+
 
     def get_contactGroups(self):
         """Return a list of all the ContactGroup."""
@@ -454,12 +502,22 @@ class Contacts():
         next_page_token = ''
         while True:
             if not (next_page_token is None):
-                # Call the People API
-                results = self.service.contactGroups().list(
-                    pageSize=1000,
-                    pageToken=next_page_token,
-                    groupFields="clientData,name,metadata,groupType"
-                ).execute()
+
+                tts=0.5 #500 ms start -> exponential backoff
+                while True:
+                    try:
+                        # Call the People API
+                        results = self.service.contactGroups().list(
+                            pageSize=1000,
+                            pageToken=next_page_token,
+                            groupFields="clientData,name,metadata,groupType"
+                        ).execute()
+                        break
+                    except HttpError as e:
+                        print("\n","[ERROR] ", e)
+                        sleep(tts)
+                        tts*=2
+
                 ContactGroup_list += results.get('contactGroups', [])
                 next_page_token = results.get('nextPageToken')
             else:
@@ -468,12 +526,18 @@ class Contacts():
 
     def get_contactGroup(self, rn):
         """Return a person body, stripped of resourceName/etag etc"""
-
-        p = self.service.contactGroups().get(
-            resourceName=rn,
-            groupFields="clientData,groupType,metadata,name"
-        ).execute()
-        return p
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            try:
+                p = self.service.contactGroups().get(
+                    resourceName=rn,
+                    groupFields="clientData,groupType,metadata,name"
+                ).execute()
+                return p
+            except HttpError as e:
+                print("\n","[ERROR] ", e)
+                sleep(tts)
+                tts*=2
 
     def update_contactGroup_tag(self, rn: str, tag: str):
         """Update the tag for a contact
@@ -488,56 +552,61 @@ class Contacts():
 
         """
         # get the current clientData
-        try:
-            p = self.service.contactGroups().get(
-                resourceName=rn,
-                groupFields='clientData'
-            ).execute()
-
-            # the clientData without the tag dict
-            wout = [
-                i
-                for i in p.get('clientData', [])
-                if i.get('key', None) != SYNC_TAG
-            ]
-            wout.append({'key': SYNC_TAG, 'value': tag})
-
-            self.service.contactGroups().update(
-                resourceName=rn,
-                body={
-                    "contactGroup": {
-                        'etag': self.info_group[rn]['etag'],
-                        'clientData': wout
-                    },
-                    "updateGroupFields": "clientData",
-                    "readGroupFields": "clientData,groupType,metadata,name"
-                }
-            ).execute()
-        except HttpError:
-            # sleep to avoid 429 HTTP error because rate limit
-            sleep(1)
-            self.update_contactGroup_tag(rn, tag)
-
-    def update_contactGroup(self, tag: str, body: dict):
-        rn = self.tag_to_rn_contactGroup(tag)
-
-        if rn is not None:
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
             try:
+                p = self.service.contactGroups().get(
+                    resourceName=rn,
+                    groupFields='clientData'
+                ).execute()
+
+                # the clientData without the tag dict
+                wout = [
+                    i
+                    for i in p.get('clientData', [])
+                    if i.get('key', None) != SYNC_TAG
+                ]
+                wout.append({'key': SYNC_TAG, 'value': tag})
+
                 self.service.contactGroups().update(
                     resourceName=rn,
                     body={
                         "contactGroup": {
                             'etag': self.info_group[rn]['etag'],
-                            'name': body["name"]
+                            'clientData': wout
                         },
+                        "updateGroupFields": "clientData",
                         "readGroupFields": "clientData,groupType,metadata,name"
                     }
                 ).execute()
+                return
+            except HttpError as e:
+                print("\n","[ERROR] ", e)
+                sleep(tts)
+                tts*=2
 
-            except HttpError:
-                # sleep to avoid 429 HTTP error because rate limit
-                sleep(1)
-                self.update_contactGroup(tag, body)
+    def update_contactGroup(self, tag: str, body: dict):
+        rn = self.tag_to_rn_contactGroup(tag)
+
+        if rn is not None:
+            tts=0.5 #500 ms start -> exponential backoff
+            while True:
+                try:
+                    self.service.contactGroups().update(
+                        resourceName=rn,
+                        body={
+                            "contactGroup": {
+                                'etag': self.info_group[rn]['etag'],
+                                'name': body["name"]
+                            },
+                            "readGroupFields": "clientData,groupType,metadata,name"
+                        }
+                    ).execute()
+                    return
+                except HttpError as e:
+                    print("\n","[ERROR] ", e)
+                    sleep(tts)
+                    tts*=2
 
     def delete_contactGroup(self, tag: str):
         # need to find the resource name
@@ -546,6 +615,15 @@ class Contacts():
             return
 
         # print(f"{self.info_group[rn]['name']} ", end='')
-        self.service.contactGroups().delete(
-            resourceName=rn, deleteContacts=False
-        ).execute()
+
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+            try:
+                self.service.contactGroups().delete(
+                    resourceName=rn, deleteContacts=False
+                ).execute()
+                return
+            except HttpError as e:
+                print("\n","[ERROR] ", e)
+                sleep(tts)
+                tts*=2
