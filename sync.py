@@ -334,7 +334,13 @@ for email, acc in con.items():
         # assign a new tag to this ContactGroup
         tag = new_tag()
         acc.update_contactGroup_tag(rn, tag)
-        newcontact = acc.get_contactGroup(rn)
+        newcontact = acc.get_contactGroup_wait_SYNC_TAG(rn,args.verbose)
+
+      
+        
+
+
+        
 
         print(newcontact)
         # record this is a new ContactGroup so we won't try syncing them laster

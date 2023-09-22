@@ -263,22 +263,38 @@ class Contacts():
 
         self.info_group = {}
         for p in self.get_contactGroups():
+            
+            if p["groupType"] != "USER_CONTACT_GROUP":
+                continue
+
             tagls = [
                 kv['value']
                 for kv in p.get('clientData', {})
                 if kv.get('key', None) == SYNC_TAG
             ]
-            if p["groupType"] != "USER_CONTACT_GROUP":
-                continue
 
-            self.info_group[p['resourceName']] = {
+            self.info_group_add(p,tagls)
+            """self.info_group[p['resourceName']] = {
                 'etag': p['etag'],
                 'tag': tagls[0] if tagls else None,
                 'updated': dateutil.parser.isoparse(
                     p['metadata']['updateTime']
                 ),
                 'name': p['name']
-            }
+            }"""
+
+    def info_group_add(self,p,tagls=None):
+        """add or update a group into the "global" info_group group"""
+
+        self.info_group[p['resourceName']] = {
+                'etag': p['etag'],
+                'tag': tagls[0] if tagls else None,
+                'updated': dateutil.parser.isoparse(
+                    p['metadata']['updateTime']
+                ),
+                'name': p['name']
+        }
+
 
     def get_all_contacts(
         self, fields=['names', 'organizations', 'clientData', 'metadata']
@@ -435,7 +451,7 @@ class Contacts():
                     sleep(tts)
                     tts*=2
 
-    def get(self, rn):
+    def get(self, rn, verbose=False):
         """Return a person body, stripped of resourceName/etag etc"""
         tts=0.5 #500 ms start -> exponential backoff
         while True:
@@ -446,7 +462,8 @@ class Contacts():
                 ).execute()
                 return self.__strip_body(p)
             except HttpError as e:
-                print("\n","[ERROR] ", e)
+                if verbose:
+                    print("\n","[ERROR] ", e)
                 sleep(tts)
                 tts*=2
 
@@ -470,7 +487,7 @@ class Contacts():
         assert(len(rn) == 1)
         return rn[0]
 
-    def add_contactGroup(self, body):
+    def add_contactGroup(self, body, verbose=False):
         """Add a person with this body
 
         Parameters
@@ -489,12 +506,13 @@ class Contacts():
                 ).execute()
                 return new_contact
             except HttpError as e:
-                print("\n","[ERROR] ", e)
+                if verbose:
+                    print("\n","[ERROR] ", e)
                 sleep(tts)
                 tts*=2
 
 
-    def get_contactGroups(self):
+    def get_contactGroups(self, verbose=False):
         """Return a list of all the ContactGroup."""
 
         # Keep getting 1000 connections until the nextPageToken becomes None
@@ -514,7 +532,8 @@ class Contacts():
                         ).execute()
                         break
                     except HttpError as e:
-                        print("\n","[ERROR] ", e)
+                        if verbose:
+                            print("\n","[ERROR] ", e)
                         sleep(tts)
                         tts*=2
 
@@ -524,7 +543,7 @@ class Contacts():
                 break
         return ContactGroup_list
 
-    def get_contactGroup(self, rn):
+    def get_contactGroup(self, rn, verbose=False):
         """Return a person body, stripped of resourceName/etag etc"""
         tts=0.5 #500 ms start -> exponential backoff
         while True:
@@ -535,9 +554,31 @@ class Contacts():
                 ).execute()
                 return p
             except HttpError as e:
-                print("\n","[ERROR] ", e)
+                if verbose:
+                    print("\n","[ERROR] ", e)
                 sleep(tts)
                 tts*=2
+
+    def get_contactGroup_wait_SYNC_TAG(self, rn, verbose=False):
+        """
+        continues requesting a contact Group until the SYNC_TAG is found
+        ( sometimes, just after updating the clientData with the SYNC_TAG inside, the stored SYNC_TAG is not returned at subsequent get_contactGroups)
+        """
+        cont=None
+        tts=0.5 #500 ms start -> exponential backoff
+        while True:
+                cont = self.get_contactGroup(rn)
+                if "clientData" in cont: 
+                    k = [i for i in cont["clientData"] if "key" in i and i["key"]==SYNC_TAG]
+                    if len(k)>0:
+                        break
+                else:
+                    if verbose:
+                        print("\n","[ERROR] ", "SYNC_TAG missing")
+                    sleep(tts)
+                    tts*=2
+        return cont
+    
 
     def update_contactGroup_tag(self, rn: str, tag: str):
         """Update the tag for a contact
@@ -581,6 +622,12 @@ class Contacts():
                 ).execute()
                 return
             except HttpError as e:
+                if e.status_code==409 and "Contact group etag is outdated" in e.reason: #etag "expired" ( or someone has changed something)
+                    #re-get the group
+                    p = self.get_contactGroup(rn)
+                    self.info_group_add(p,None)             #TODO: check if is correct to insert the tag...?  None <-> tag
+
+
                 print("\n","[ERROR] ", e)
                 sleep(tts)
                 tts*=2
