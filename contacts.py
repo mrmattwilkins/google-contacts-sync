@@ -205,7 +205,10 @@ class Contacts():
 
         # for some reason some of my contacts have more than one name.  remove
         # anything except the first.  same problem with genders and birthdays
-        ret['names'] = [ret['names'][0]]
+
+        if 'names' in ret:
+            ret['names'] = [ret['names'][0]]
+
         if 'genders' in ret:
             ret['genders'] = [ret['genders'][0]]
         if "birthdays" in ret:
